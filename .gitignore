@@ -1,3 +1,9 @@
+# Must add notebooks manually
+*.ipynb
+
+# Dynamic generated version file
+_version.py
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -129,6 +135,9 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+
+# VSCode project settings
+.vscode
 
 # Spyder project settings
 .spyderproject
