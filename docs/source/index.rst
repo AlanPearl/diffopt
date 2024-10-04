@@ -1,0 +1,56 @@
+.. diffopt documentation master file, created by
+   sphinx-quickstart on Fri Oct 4 10:21:41 2024.
+   You can adapt this file completely to your liking, but it should at least
+   contain the root `toctree` directive.
+
+Welcome to diffopt's documentation!
+===================================
+
+DiffOpt is a collection of tools that may be useful for parallelizable
+optimization of large-parameter, memory-intensive, and/or differentiable
+models implemented in Jax. It is composed of the following three subpackages:
+(1) multigrad enables enables you to define a data-parallelized (over MPI)
+loss function and compute its gradient, (2) kdescent performs stochastic
+gradient descent over mini-batched KDE statistics, and (3) multiswarm is an
+MPI-parallelized implementation of Particle Swarm Optimization (PSO).
+The code is open-source and available on
+`GitHub <https://github.com/AlanPearl/diffopt>`__.
+
+**OVERVIEW:**
+
+.. toctree::
+   :maxdepth: 2
+
+   installation.rst
+   reference.rst
+
+**(1) MULTIGRAD**
+
+.. toctree::
+   :maxdepth: 2
+
+   multigrad/intro.ipynb
+
+**(2) KDESCENT**
+
+.. toctree::
+   :maxdepth: 2
+
+   kdescent/intro.ipynb
+   kdescent/hmf_upweight.ipynb
+   kdescent/integration.ipynb
+
+**(3) MULTISWARM**
+
+.. toctree::
+   :maxdepth: 2
+
+   multiswarm/intro.ipynb
+
+Indices and tables
+==================
+
+* :ref:`genindex`
+* :ref:`search`
+
+.. * :ref:`modindex`

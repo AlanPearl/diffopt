@@ -1,0 +1,8 @@
+nbsphinx
+IPython
+matplotlib
+seaborn
+tqdm
+ipykernel
+jupyter
+ipywidgets
