@@ -1,5 +1,4 @@
 nbsphinx
-pandoc
 IPython
 matplotlib
 seaborn

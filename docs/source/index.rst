@@ -16,34 +16,21 @@ MPI-parallelized implementation of Particle Swarm Optimization (PSO).
 The code is open-source and available on
 `GitHub <https://github.com/AlanPearl/diffopt>`__.
 
-**OVERVIEW:**
-
 .. toctree::
    :maxdepth: 2
+   :caption: Table of Contents
 
    installation.rst
    reference.rst
 
-**(1) MULTIGRAD**
-
-.. toctree::
-   :maxdepth: 2
 
    multigrad/intro.ipynb
 
-**(2) KDESCENT**
-
-.. toctree::
-   :maxdepth: 2
 
    kdescent/intro.ipynb
    kdescent/hmf_upweight.ipynb
    kdescent/integration.ipynb
 
-**(3) MULTISWARM**
-
-.. toctree::
-   :maxdepth: 2
 
    multiswarm/intro.ipynb
 
