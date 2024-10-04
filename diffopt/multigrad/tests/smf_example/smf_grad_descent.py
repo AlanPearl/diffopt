@@ -130,7 +130,7 @@ if __name__ == "__main__":
 
         # Plot the HMF
         logmh_min, logmh_max = logmh_per_rank[0][0], logmh_per_rank[-1][-1]
-        bins = jnp.linspace(logmh_min, logmh_max, 101)
+        bins = np.linspace(logmh_min, logmh_max, 101)
         for logmh in logmh_per_rank:
             plt.hist(logmh, bins=bins)
         plt.semilogy()
@@ -145,8 +145,9 @@ if __name__ == "__main__":
         plt.semilogy(smf_bin_cens, true_smf, "go", label="Truth")
         plt.semilogy(
             smf_bin_cens, data["target_sumstats"], "rx", label="Target")
-        plt.plot(smf_bin_cens, guess_smf, "k--", label="Initial guess")
-        plt.plot(smf_bin_cens, final_smf, label="Final solution")
+        plt.plot(smf_bin_cens, np.array(guess_smf),
+                 "k--", label="Initial guess")
+        plt.plot(smf_bin_cens, np.array(final_smf), label="Final solution")
         plt.xlabel("$\\log(M_\\star)$", fontsize=16)
         plt.ylabel(
             "$\\Phi(M_\\star)\\ [h^3{\\rm Mpc^{-3} dex^{-1}}]$", fontsize=16)
