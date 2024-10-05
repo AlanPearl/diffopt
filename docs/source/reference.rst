@@ -1,10 +1,13 @@
-:tocdepth: 3
+.. :tocdepth: 3
 
+*************
 API Reference
-=============
+*************
 
-``multigrad``
--------------
+.. contents:: Table of Contents
+
+:mod:`multigrad`
+================
 
 .. autoclass:: diffopt.multigrad.OnePointModel
     :members:
@@ -19,8 +22,8 @@ API Reference
 .. autofunction:: diffopt.multigrad.reduce_sum
 
 
-``kdescent``
--------------
+:mod:`kdescent`
+===============
 
 .. autoclass:: diffopt.kdescent.KCalc
     :members:
@@ -31,8 +34,8 @@ API Reference
 .. autofunction:: diffopt.kdescent.bfgs
 
 
-``multiswarm``
---------------
+:mod:`multiswarm`
+=================
 
 .. autoclass:: diffopt.multiswarm.ParticleSwarm
     :members:

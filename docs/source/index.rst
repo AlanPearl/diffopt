@@ -6,7 +6,7 @@
 Welcome to diffopt's documentation!
 ===================================
 
-DiffOpt is a collection of tools that may be useful for parallelizable
+DiffOpt is a collection of tools that are useful for parallelizable
 optimization of large-parameter, memory-intensive, and/or differentiable
 models implemented in Jax. It is composed of the following three subpackages:
 (1) multigrad enables enables you to define a data-parallelized (over MPI)
@@ -16,23 +16,28 @@ MPI-parallelized implementation of Particle Swarm Optimization (PSO).
 The code is open-source and available on
 `GitHub <https://github.com/AlanPearl/diffopt>`__.
 
-.. toctree::
-   :maxdepth: 2
-   :caption: Table of Contents
+OVERVIEW
+---------
 
-   installation.rst
-   reference.rst
+* :doc:`installation`
+* :doc:`reference`
 
+MULTIGRAD
+---------
 
-   multigrad/intro.ipynb
+* :doc:`multigrad/intro`
 
+KDESCENT
+--------
 
-   kdescent/intro.ipynb
-   kdescent/hmf_upweight.ipynb
-   kdescent/integration.ipynb
+* :doc:`kdescent/intro`
+* :doc:`kdescent/hmf_upweight`
+* :doc:`kdescent/integration`
 
+MULTISWARM
+----------
 
-   multiswarm/intro.ipynb
+* :doc:`multiswarm/intro`
 
 Indices and tables
 ==================
@@ -41,3 +46,39 @@ Indices and tables
 * :ref:`search`
 
 .. * :ref:`modindex`
+
+.. Hidden TOCs
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Overview
+   :hidden:
+
+   installation.rst
+   reference.rst
+
+
+.. toctree::
+   :maxdepth: 2
+   :caption: multigrad
+   :hidden:
+
+   multigrad/intro.ipynb
+
+
+.. toctree::
+   :maxdepth: 2
+   :caption: kdescent
+   :hidden:
+
+   kdescent/intro.ipynb
+   kdescent/hmf_upweight.ipynb
+   kdescent/integration.ipynb
+
+
+.. toctree::
+   :maxdepth: 2
+   :caption: multiswarm
+   :hidden:
+
+   multiswarm/intro.ipynb
