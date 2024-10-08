@@ -9,42 +9,42 @@ Welcome to diffopt's documentation!
 DiffOpt is a collection of tools that are useful for parallelizable
 optimization of large-parameter, memory-intensive, and/or differentiable
 models implemented in Jax. It is composed of the following three subpackages:
-(1) multigrad enables enables you to define a data-parallelized (over MPI)
-loss function and compute its gradient, (2) kdescent performs stochastic
-gradient descent over mini-batched KDE statistics, and (3) multiswarm is an
+(1) ``multigrad`` enables enables you to define a data-parallelized (over MPI)
+loss function and compute its gradient, (2) ``kdescent`` performs stochastic
+gradient descent over mini-batched KDE statistics, and (3) ``multiswarm`` is an
 MPI-parallelized implementation of Particle Swarm Optimization (PSO).
 The code is open-source and available on
 `GitHub <https://github.com/AlanPearl/diffopt>`__.
 
-OVERVIEW
----------
+Overview
+--------
 
 * :doc:`installation`
 * :doc:`reference`
 
-MULTIGRAD
----------
+:mod:`multigrad`
+================
 
 * :doc:`multigrad/intro`
 
-KDESCENT
---------
+:mod:`kdescent`
+===============
 
 * :doc:`kdescent/intro`
 * :doc:`kdescent/hmf_upweight`
 * :doc:`kdescent/integration`
 
-MULTISWARM
-----------
+:mod:`multiswarm`
+=================
 
 * :doc:`multiswarm/intro`
 
 Indices and tables
-==================
+------------------
 
 * :ref:`genindex`
-* :ref:`search`
 
+.. * :ref:`search`
 .. * :ref:`modindex`
 
 .. Hidden TOCs
@@ -60,7 +60,7 @@ Indices and tables
 
 .. toctree::
    :maxdepth: 2
-   :caption: multigrad
+   :caption: MULTIGRAD
    :hidden:
 
    multigrad/intro.ipynb
@@ -68,7 +68,7 @@ Indices and tables
 
 .. toctree::
    :maxdepth: 2
-   :caption: kdescent
+   :caption: KDESCENT
    :hidden:
 
    kdescent/intro.ipynb
@@ -78,7 +78,7 @@ Indices and tables
 
 .. toctree::
    :maxdepth: 2
-   :caption: multiswarm
+   :caption: MULTISWARM
    :hidden:
 
    multiswarm/intro.ipynb
