@@ -154,7 +154,7 @@ $$ v_{i+1} = w_I v_i + w_C (x_{\rm PB} - x_{i+1})
 + w_S (x_{\rm GB} - x_{i+1}) $$
 
 The `multiswarm` implementation of PSO allows users to conveniently distribute 
-the loss function computations performed by each paricle across MPI ranks. 
+the loss function computations performed by each particle across MPI ranks. 
 Particles are evenly distributed across all ranks by default, but users 
 needing further control can provide a custom MPI communicator object, and/or 
 specify the `ranks_per_particle` argument to manually control intra-particle 
