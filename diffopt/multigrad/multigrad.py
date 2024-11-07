@@ -224,7 +224,8 @@ class OnePointModel:
 
     # NOTE: Never jit this method because it uses mpi4py
     def run_simple_grad_descent(self: Any, guess,
-                                nsteps=100, learning_rate=0.01):
+                                nsteps=100, learning_rate=0.01,
+                                thin=1, progress=True):
         """
         Descend the gradient with a fixed learning rate to optimize parameters,
         given an initial guess. Stochasticity not allowed.
@@ -237,6 +238,11 @@ class OnePointModel:
             The number of steps to take.
         learning_rate : float (default=0.001)
             The fixed learning rate.
+        thin : int, optional
+            Return parameters for every `thin` iterations, by default 1. Set
+            `thin=0` to only return final parameters
+        progress : bool, optional
+            Display tqdm progress bar, by default True
 
         Returns
         -------
@@ -253,12 +259,14 @@ class OnePointModel:
             learning_rate=learning_rate,
             loss_and_grad_func=self.calc_loss_and_grad_from_params,
             has_aux=False,
+            thin=thin,
+            progress=progress
         )
 
     # NOTE: Never jit this method because it uses mpi4py
     def run_adam(self: Any, guess, nsteps=100, param_bounds=None,
                  learning_rate=0.01, randkey=None, const_randkey=False,
-                 comm=None):
+                 thin=1, progress=True, comm=None):
         """
         Run adam to descend the gradient and optimize the model parameters,
         given an initial guess. Stochasticity is allowed if randkey is passed.
@@ -280,6 +288,11 @@ class OnePointModel:
         const_randkey : bool (default=False)
             By default, randkey is regenerated at each gradient descent
             iteration. Remove this behavior by setting const_randkey=True
+        thin : int, optional
+            Return parameters for every `thin` iterations, by default 1. Set
+            `thin=0` to only return final parameters
+        progress : bool, optional
+            Display tqdm progress bar, by default True
 
         Returns
         -------
@@ -301,14 +314,14 @@ class OnePointModel:
         params_steps = run_adam(
             loss_and_grad_fn, params=guess, data=None, nsteps=nsteps,
             param_bounds=param_bounds, learning_rate=learning_rate,
-            randkey=randkey
+            randkey=randkey, thin=thin, progress=progress
         )
 
         return jnp.asarray(comm.bcast(params_steps, root=0))
 
     # NOTE: Never jit this method because it uses mpi4py
     def run_bfgs(self: Any, guess, maxsteps=100, param_bounds=None,
-                 randkey=None, comm=None):
+                 randkey=None, progress=True, comm=None):
         """
         Run BFGS to descend the gradient and optimize the model parameters,
         given an initial guess. Stochasticity must be held fixed via a random
@@ -327,6 +340,8 @@ class OnePointModel:
             Since BFGS requires a deterministic function, this key will be
             passed to `calc_loss_and_grad_from_params()` as the "randkey" kwarg
             as a constant at every iteration
+        progress : bool, optional
+            Display tqdm progress bar, by default True
 
         Returns
         -------
@@ -349,7 +364,8 @@ class OnePointModel:
         comm = self.comm if comm is None else comm
         return run_bfgs(
             self.calc_loss_and_grad_from_params, guess, maxsteps=maxsteps,
-            param_bounds=param_bounds, randkey=randkey, comm=comm)
+            param_bounds=param_bounds, randkey=randkey,
+            progress=progress, comm=comm)
 
     def run_lhs_param_scan(self, xmins, xmaxs, n_dim,
                            num_evaluations, seed=None, randkey=None):
@@ -581,22 +597,27 @@ class OnePointGroup:
 
     # NOTE: Never jit this method because it uses mpi4py
     def run_simple_grad_descent(self, guess,
-                                nsteps=100, learning_rate=0.01):
+                                nsteps=100, learning_rate=0.01,
+                                thin=1, progress=True):
         return OnePointModel.run_simple_grad_descent(
-            self, guess, nsteps, learning_rate)
+            self, guess, nsteps, learning_rate, thin=thin, progress=progress)
 
     # NOTE: Never jit this method because it uses mpi4py
-    def run_bfgs(self, guess, maxsteps=100, param_bounds=None, randkey=None):
+    def run_bfgs(self, guess, maxsteps=100, param_bounds=None, randkey=None,
+                 progress=True):
         return OnePointModel.run_bfgs(
             self, guess, maxsteps, param_bounds=param_bounds,
-            randkey=randkey, comm=self.main_comm)
+            randkey=randkey, progress=progress,
+            comm=self.main_comm)
 
     # NOTE: Never jit this method because it uses mpi4py
     def run_adam(self, guess, nsteps=100, param_bounds=None,
-                 learning_rate=0.01, randkey=None, const_randkey=False):
+                 learning_rate=0.01, randkey=None, const_randkey=False,
+                 thin=1, progress=True):
         return OnePointModel.run_adam(
             self, guess, nsteps, param_bounds, learning_rate, randkey,
-            const_randkey=const_randkey, comm=self.main_comm)
+            const_randkey=const_randkey, thin=thin, progress=progress,
+            comm=self.main_comm)
 
     def __hash__(self):
         if isinstance(self.models, OnePointModel):

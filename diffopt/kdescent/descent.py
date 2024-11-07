@@ -12,7 +12,8 @@ from . import keygen
 
 
 def adam(lossfunc, guess, nsteps=100, param_bounds=None,
-         learning_rate=0.01, randkey=1, const_randkey=False, **other_kwargs):
+         learning_rate=0.01, randkey=1, const_randkey=False,
+         thin=1, progress=True, **other_kwargs):
     """
     Perform gradient descent
 
@@ -36,6 +37,11 @@ def adam(lossfunc, guess, nsteps=100, param_bounds=None,
     const_randkey : bool, optional
         By default (False), randkey is regenerated at each gradient descent
         iteration. Remove this behavior by setting const_randkey=True
+    thin : int, optional
+        Return parameters for every `thin` iterations, by default 1. Set
+        `thin=0` to only return final parameters
+    progress : bool, optional
+        Display tqdm progress bar, by default True
 
     Returns
     -------
@@ -46,7 +52,7 @@ def adam(lossfunc, guess, nsteps=100, param_bounds=None,
     if param_bounds is None:
         return adam_unbounded(
             lossfunc, guess, nsteps, learning_rate, randkey,
-            const_randkey, **other_kwargs)
+            const_randkey, thin, progress, **other_kwargs)
 
     assert len(guess) == len(param_bounds)
     if hasattr(param_bounds, "tolist"):
@@ -60,14 +66,15 @@ def adam(lossfunc, guess, nsteps=100, param_bounds=None,
     init_uparams = apply_transforms(guess, param_bounds)
     uparams = adam_unbounded(
         ulossfunc, init_uparams, nsteps, learning_rate, randkey,
-        const_randkey, **other_kwargs)
+        const_randkey, thin, progress, **other_kwargs)
     params = apply_inverse_transforms(uparams.T, param_bounds).T
 
     return params
 
 
 def adam_unbounded(lossfunc, guess, nsteps=100, learning_rate=0.01,
-                   randkey=1, const_randkey=False, **other_kwargs):
+                   randkey=1, const_randkey=False,
+                   thin=1, progress=True, **other_kwargs):
     kwargs = {**other_kwargs}
     if randkey is not None:
         randkey = keygen.init_randkey(randkey)
@@ -78,13 +85,18 @@ def adam_unbounded(lossfunc, guess, nsteps=100, learning_rate=0.01,
     opt = optax.adam(learning_rate)
     solver = jaxopt.OptaxSolver(opt=opt, fun=lossfunc, maxiter=nsteps)
     state = solver.init_state(guess, **kwargs)
-    params = [guess]
-    for _ in tqdm.trange(nsteps, desc="Adam Gradient Descent Progress"):
+    params = []
+    params_i = guess
+    for i in tqdm.trange(nsteps, disable=not progress,
+                         desc="Adam Gradient Descent Progress"):
         if randkey is not None:
             randkey, key_i = jax.random.split(randkey)
             kwargs["randkey"] = key_i
-        params_i, state = solver.update(params[-1], state, **kwargs)
-        params.append(params_i)
+        params_i, state = solver.update(params_i, state, **kwargs)
+        if i == nsteps - 1 or (thin and i % thin == thin - 1):
+            params.append(params_i)
+    if not thin:
+        params = params[-1]
 
     return jnp.array(params)
 

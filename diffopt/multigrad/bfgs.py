@@ -18,19 +18,19 @@ except ImportError:
     N_RANKS = 1
 
 
-def trange_no_tqdm(n, desc=None):
+def trange_no_tqdm(n, desc=None, disable=False):
     return range(n)
 
 
-def trange_with_tqdm(n, desc="BFGS Gradient Descent Progress"):
-    return tqdm.trange(n, desc=desc, leave=True)
+def trange_with_tqdm(n, desc="BFGS Gradient Descent Progress", disable=False):
+    return tqdm.trange(n, desc=desc, leave=True, disable=disable)
 
 
 bfgs_trange = trange_no_tqdm if tqdm is None else trange_with_tqdm
 
 
 def run_bfgs(loss_and_grad_fn, params, maxsteps=100, param_bounds=None,
-             randkey=None, comm=COMM):
+             randkey=None, progress=True, comm=COMM):
     """Run the adam optimizer on a loss function with a custom gradient.
 
     Parameters
@@ -46,6 +46,8 @@ def run_bfgs(loss_and_grad_fn, params, maxsteps=100, param_bounds=None,
         `None` as the bound for each unbounded parameter, by default None
     randkey : int | PRNG Key (default=None)
         This will be passed to `logloss_and_grad_fn` under the "randkey" kwarg
+    progress : bool, optional
+        Display tqdm progress bar, by default True
     comm : MPI Communicator (default=COMM_WORLD)
         Communicator between all desired MPI ranks
 
@@ -66,7 +68,7 @@ def run_bfgs(loss_and_grad_fn, params, maxsteps=100, param_bounds=None,
         kwargs["randkey"] = randkey
 
     if comm is None or comm.rank == 0:
-        pbar = bfgs_trange(maxsteps)
+        pbar = bfgs_trange(maxsteps, disable=not progress)
 
         # Wrap loss_and_grad function with commands to the worker ranks
         def loss_and_grad_fn_root(params):

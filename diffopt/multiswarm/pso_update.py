@@ -95,7 +95,8 @@ class ParticleSwarm:
         self.social_weight = social_weight
         self.vmax_frac = vmax_frac
 
-    def run_pso(self, lossfunc, nsteps=100, keep_init_random_state=False):
+    def run_pso(self, lossfunc, nsteps=100, progress=True,
+                keep_init_random_state=False):
         """
         Run particle swarm optimization (PSO)
 
@@ -106,6 +107,8 @@ class ParticleSwarm:
             with signature `lossfunc(x)` where x is an array of shape `(ndim,)`
         nsteps : int, optional
             Number of time step iterations, by default 100
+        progress : bool, optional
+            Display tqdm progress bar, by default True
         keep_init_random_state : bool, optional
             Set True to be able to rerun an identical run, or False (default)
             to continue a run by manually setting swarm.x_init and swarm.v_init
@@ -140,12 +143,12 @@ class ParticleSwarm:
         loc_loss_history = [[] for _ in range(self.num_particles_on_this_rank)]
         start = time()
 
-        def trange(x):
+        def trange(x, disable=False):
             if self.comm.rank:
                 return range(x)
             else:
-                return tqdm.trange(x, desc="PSO Progress")
-        for _ in trange(nsteps):
+                return tqdm.trange(x, desc="PSO Progress", disable=disable)
+        for _ in trange(nsteps, disable=not progress):
             istep_loss = [None for _ in range(self.num_particles_on_this_rank)]
             for ip in range(self.num_particles_on_this_rank):
                 update_key = jran.split(particle_keys[ip], 1)[0]

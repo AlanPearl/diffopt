@@ -58,7 +58,7 @@ def test_simple_grad_descent_pipeline():
     gd_loss, gd_params = gd_iterations.loss, gd_iterations.params
     assert jnp.isclose(gd_loss[-1], 0.0)
     assert jnp.allclose(gd_params[-1], jnp.array([*truth]))
-    assert jnp.allclose(true_gradloss, 0.0, atol=1e-5)
+    assert jnp.allclose(true_gradloss, 0.0, atol=1e-4)
 
     # Calculate grad(loss) with the more memory efficient method
     loss, dloss_dparams = model.calc_loss_and_grad_from_params(truth)

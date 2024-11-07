@@ -36,12 +36,12 @@ __all__ = ["simple_grad_descent", "GradDescentResult",
            "latin_hypercube_sampler", "scatter_nd"]
 
 
-def trange_no_tqdm(n, desc=None):
+def trange_no_tqdm(n, desc=None, disable=False):
     return range(n)
 
 
-def trange_with_tqdm(n, desc=None):
-    return tqdm.trange(n, desc=desc)
+def trange_with_tqdm(n, desc=None, disable=False):
+    return tqdm.trange(n, desc=desc, disable=disable)
 
 
 trange = trange_no_tqdm if tqdm is None else trange_with_tqdm
@@ -85,6 +85,8 @@ def simple_grad_descent(
     loss_and_grad_func=None,
     grad_loss_func=None,
     has_aux=False,
+    thin=1,
+    progress=True,
     **kwargs,
 ):
     if loss_and_grad_func is None:
@@ -115,13 +117,19 @@ def simple_grad_descent(
 
     # The below is equivalent to lax.scan without jitting
     # ===================================================
-    initstate = (0.0, guess)
+    state = (0.0, guess)
     loss, params, aux = [], [], []
-    for x in trange(nsteps, desc="Simple Gradient Descent Progress"):
-        initstate, y = loopfunc(initstate, x)
-        loss.append(y[0])
-        params.append(y[1])
-        aux.append(y[2])
+    for x in trange(nsteps, desc="Simple Gradient Descent Progress",
+                    disable=not progress):
+        state, y = loopfunc(state, x)
+        if x == nsteps - 1 or (thin and x % thin == thin - 1):
+            loss.append(y[0])
+            params.append(y[1])
+            aux.append(y[2])
+    if not thin:
+        loss = loss[-1]
+        params = params[-1]
+        aux = aux[-1]
     loss = jnp.array(loss)
     params = jnp.array(params)
     if has_aux:
