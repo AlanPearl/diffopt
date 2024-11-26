@@ -15,13 +15,10 @@ import unittest
 from ... import multigrad
 from .smf_example import smf_grad_descent as sgd
 
-comm = MPI.COMM_WORLD
-rank = comm.Get_rank()
-size = comm.Get_size()
-
 
 @unittest.skipIf(MPI is None, "MPI must be installed to run this test")
 def test_reduce_sum():
+    rank, size = MPI.COMM_WORLD.rank, MPI.COMM_WORLD.size
     # Set value equal to the rank of the process
     value = jnp.array(rank)
 
@@ -29,7 +26,7 @@ def test_reduce_sum():
     result = multigrad.reduce_sum(value)
 
     # Gather the results from all processes
-    gathered_results = jnp.array(comm.allgather(result))
+    gathered_results = jnp.array(MPI.COMM_WORLD.allgather(result))
 
     if not rank:
         # Perform testing only on the rank 0 process
