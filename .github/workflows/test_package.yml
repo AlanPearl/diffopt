@@ -31,7 +31,7 @@ jobs:
     - name: Install dependencies
       shell: bash -l {0}
       run: |
-        conda install -yq mpi4py jax 
+        conda install -yq jax 
         conda install -yq pip pytest pytest-cov flake8
 
     - name: Install package

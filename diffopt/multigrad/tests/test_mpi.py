@@ -5,9 +5,13 @@ It should work for any number of processes, e.g.
 and `mpiexec -n 10 pytest test_mpi.py` all must pass
 (the --with-mpi flag shouldn't have any effect)
 """
-from mpi4py import MPI
+try:
+    from mpi4py import MPI
+except ImportError:
+    MPI = None
 import jax.numpy as jnp
 
+import unittest
 from ... import multigrad
 from .smf_example import smf_grad_descent as sgd
 
@@ -16,6 +20,7 @@ rank = comm.Get_rank()
 size = comm.Get_size()
 
 
+@unittest.skipIf(MPI is None, "MPI must be installed to run this test")
 def test_reduce_sum():
     # Set value equal to the rank of the process
     value = jnp.array(rank)
