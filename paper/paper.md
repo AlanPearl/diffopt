@@ -62,6 +62,8 @@ routine of nearly any big-data model. `kdescent` and `multiswarm` each provide
 powerful fitting tools which are fully compatible with the parallelization 
 framework laid out by `multigrad`.
 
+Past efforts have already been made towards parallelization of Jax [`mpi4jax`, @Hafner:2021], parallel gradient descent [e.g., @Gray:2019], and parallel PSO [@Li:2005; @Blank:2020]. Our approach combines many of these features and more into one easy-to-use, documented Python module with all the tools to optimize arbitrarily complex models that the user has implemented in the Jax framework. Additionally, while the fundamental MPI reductions available through `mpi4jax` are generally sufficient, our `multigrad` procedure provides significant convenience for problems in which complex summary statistics are computed in parallel before being applied to a differentiable loss function.
+
 # Method
 
 ## `multigrad`
