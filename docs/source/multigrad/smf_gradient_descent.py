@@ -1,4 +1,9 @@
-from mpi4py import MPI
+try:
+    from mpi4py import MPI
+    COMM_WORLD = MPI.COMM_WORLD
+except ImportError:
+    MPI = None
+    COMM_WORLD = None
 import jax.scipy
 from jax import numpy as jnp
 import numpy as np
@@ -7,13 +12,19 @@ import matplotlib.pyplot as plt
 from diffopt import multigrad
 
 
-def load_halo_masses(num_halos=10_000, comm=MPI.COMM_WORLD):
+def load_halo_masses(num_halos=10_000, comm=COMM_WORLD):
+    if comm is None:
+        size = 1
+        rank = 0
+    else:
+        size = comm.size
+        rank = comm.rank
     # Generate fake halo masses between 10^10 < M_h < 10^11 as a power law
     quantile = jnp.linspace(0, 0.9, num_halos)
     mhalo = 1e10 / (1 - quantile)
 
     # Assign halos evenly across given MPI ranks (only one rank for now)
-    return np.array_split(mhalo, comm.size)[comm.rank]
+    return np.array_split(mhalo, size)[rank]
 
 
 # Compute one bin of the stellar mass function (SMF)
@@ -92,6 +103,7 @@ class MySMFModel(multigrad.OnePointModel):
 
 
 if __name__ == "__main__":
+    assert MPI is not None, "MPI must be installed to run this script"
     volume = 1.0
     smf_bin_edges = jnp.linspace(9, 10, 11)
     true_params = jnp.array([-2.0, -0.5])

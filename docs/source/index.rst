@@ -20,6 +20,7 @@ Overview
 --------
 
 * :doc:`installation`
+* :doc:`include_contributing`
 * :doc:`reference`
 
 :mod:`multigrad`
@@ -55,6 +56,7 @@ Indices and tables
    :hidden:
 
    installation.rst
+   include_contributing.md
    reference.rst
 
 

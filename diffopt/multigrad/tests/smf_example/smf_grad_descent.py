@@ -5,7 +5,10 @@ import time
 from typing import NamedTuple
 from dataclasses import dataclass
 
-from mpi4py import MPI
+try:
+    from mpi4py import MPI
+except ImportError:
+    MPI = None
 import jax.scipy
 from jax import numpy as jnp
 import numpy as np
@@ -21,11 +24,15 @@ class ParamTuple(NamedTuple):
 
 # Generate fake HMF as power law (truncated so that the SMF has a knee)
 def load_halo_masses(num_halos=10_000, slope=-2, mmin=10.0 ** 10, qmax=0.95):
+    if MPI is None:
+        size, rank = 1, 0
+    else:
+        size, rank = MPI.COMM_WORLD.size, MPI.COMM_WORLD.rank
     q = jnp.linspace(0, qmax, num_halos)
     mhalo = mmin * (1 - q) ** (1/(slope+1))
 
     # Assign different halos to different MPI processes
-    return np.array_split(mhalo, MPI.COMM_WORLD.size)[MPI.COMM_WORLD.rank]
+    return np.array_split(mhalo, size)[rank]
 
 
 # SMF helper functions
@@ -89,6 +96,7 @@ parser.add_argument("--num-steps", type=int, default=2000)
 parser.add_argument("--learning-rate", type=float, default=1e-3)
 
 if __name__ == "__main__":
+    assert MPI is not None, "MPI must be installed to run this script"
     args = parser.parse_args()
     data = dict(
         log_halo_masses=jnp.log10(load_halo_masses(args.num_halos)),

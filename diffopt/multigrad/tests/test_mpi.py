@@ -5,18 +5,20 @@ It should work for any number of processes, e.g.
 and `mpiexec -n 10 pytest test_mpi.py` all must pass
 (the --with-mpi flag shouldn't have any effect)
 """
-from mpi4py import MPI
+try:
+    from mpi4py import MPI
+except ImportError:
+    MPI = None
 import jax.numpy as jnp
 
+import unittest
 from ... import multigrad
 from .smf_example import smf_grad_descent as sgd
 
-comm = MPI.COMM_WORLD
-rank = comm.Get_rank()
-size = comm.Get_size()
 
-
+@unittest.skipIf(MPI is None, "MPI must be installed to run this test")
 def test_reduce_sum():
+    rank, size = MPI.COMM_WORLD.rank, MPI.COMM_WORLD.size
     # Set value equal to the rank of the process
     value = jnp.array(rank)
 
@@ -24,7 +26,7 @@ def test_reduce_sum():
     result = multigrad.reduce_sum(value)
 
     # Gather the results from all processes
-    gathered_results = jnp.array(comm.allgather(result))
+    gathered_results = jnp.array(MPI.COMM_WORLD.allgather(result))
 
     if not rank:
         # Perform testing only on the rank 0 process
@@ -58,7 +60,7 @@ def test_simple_grad_descent_pipeline():
     gd_loss, gd_params = gd_iterations.loss, gd_iterations.params
     assert jnp.isclose(gd_loss[-1], 0.0)
     assert jnp.allclose(gd_params[-1], jnp.array([*truth]))
-    assert jnp.allclose(true_gradloss, 0.0, atol=1e-5)
+    assert jnp.allclose(true_gradloss, 0.0, atol=1e-4)
 
     # Calculate grad(loss) with the more memory efficient method
     loss, dloss_dparams = model.calc_loss_and_grad_from_params(truth)

@@ -25,12 +25,12 @@ except ImportError:
     N_RANKS = 1
 
 
-def trange_no_tqdm(n, desc=None):
+def trange_no_tqdm(n, desc=None, disable=False):
     return range(n)
 
 
-def trange_with_tqdm(n, desc="Adam Gradient Descent Progress"):
-    return tqdm.trange(n, desc=desc)
+def trange_with_tqdm(n, desc="Adam Gradient Descent Progress", disable=False):
+    return tqdm.trange(n, desc=desc, disable=disable)
 
 
 adam_trange = trange_no_tqdm if tqdm is None else trange_with_tqdm
@@ -49,27 +49,32 @@ def _master_wrapper(params, logloss_and_grad_fn, data, randkey=None):
     return loss, grad
 
 
-def _adam_optimizer(params, fn, fn_data, nsteps, learning_rate, randkey=None):
+def _adam_optimizer(params, fn, fn_data, nsteps, learning_rate, randkey=None,
+                    thin=1, progress=True):
     kwargs = {}
     # Note: Might be recommended to use optax instead of jax.example_libraries
     opt_init, opt_update, get_params = jax_opt.adam(learning_rate)
     opt_state = opt_init(params)
 
-    param_steps = [params]
-    for step in adam_trange(nsteps):
+    param_steps = []
+    for step in adam_trange(nsteps, disable=not progress):
         if randkey is not None:
             randkey, key_i = jax.random.split(randkey)
             kwargs["randkey"] = key_i
         _, grad = fn(params, *fn_data, **kwargs)
         opt_state = opt_update(step, grad, opt_state)
         params = get_params(opt_state)
-        param_steps.append(params)
+        if step == nsteps - 1 or (thin and step % thin == thin - 1):
+            param_steps.append(params)
+    if not thin:
+        param_steps = param_steps[-1]
 
     return jnp.array(param_steps)
 
 
 def run_adam_unbounded(logloss_and_grad_fn, params, data, nsteps=100,
-                       learning_rate=0.01, randkey=None):
+                       learning_rate=0.01, randkey=None,
+                       thin=1, progress=True):
     """Run the adam optimizer on a loss function with a custom gradient.
 
     Parameters
@@ -88,6 +93,11 @@ def run_adam_unbounded(logloss_and_grad_fn, params, data, nsteps=100,
     randkey : int | PRNG Key
         If given, a new PRNG Key will be generated at each iteration and be
         passed to `logloss_and_grad_fn` under the "randkey" kwarg
+    thin : int, optional
+        Return parameters for every `thin` iterations, by default 1. Set
+        `thin=0` to only return final parameters
+    progress : bool, optional
+        Display tqdm progress bar, by default True
 
     Returns
     -------
@@ -104,7 +114,7 @@ def run_adam_unbounded(logloss_and_grad_fn, params, data, nsteps=100,
         fn_data = (logloss_and_grad_fn, data)
 
         params = _adam_optimizer(params, fn, fn_data, nsteps, learning_rate,
-                                 randkey=randkey)
+                                 randkey=randkey, thin=thin, progress=progress)
 
         if COMM is not None:
             COMM.bcast("exit", root=0)
@@ -131,7 +141,7 @@ def run_adam_unbounded(logloss_and_grad_fn, params, data, nsteps=100,
 
 
 def run_adam(logloss_and_grad_fn, params, data, nsteps=100, param_bounds=None,
-             learning_rate=0.01, randkey=None):
+             learning_rate=0.01, randkey=None, thin=1, progress=True):
     """Run the adam optimizer on a loss function with a custom gradient.
 
     Parameters
@@ -153,6 +163,11 @@ def run_adam(logloss_and_grad_fn, params, data, nsteps=100, param_bounds=None,
     randkey : int | PRNG Key
         If given, a new PRNG Key will be generated at each iteration and be
         passed to `logloss_and_grad_fn` under the "randkey" kwarg
+    thin : int, optional
+        Return parameters for every `thin` iterations, by default 1. Set
+        `thin=0` to only return final parameters
+    progress : bool, optional
+        Display tqdm progress bar, by default True
 
     Returns
     -------
@@ -162,7 +177,8 @@ def run_adam(logloss_and_grad_fn, params, data, nsteps=100, param_bounds=None,
     if param_bounds is None:
         return run_adam_unbounded(
             logloss_and_grad_fn, params, data, nsteps=nsteps,
-            learning_rate=learning_rate, randkey=randkey)
+            learning_rate=learning_rate, randkey=randkey,
+            thin=thin, progress=progress)
 
     assert len(params) == len(param_bounds)
     if hasattr(param_bounds, "tolist"):
@@ -182,7 +198,8 @@ def run_adam(logloss_and_grad_fn, params, data, nsteps=100, param_bounds=None,
 
     uparams = apply_trans(params)
     final_uparams = run_adam_unbounded(
-        unbound_loss_and_grad, uparams, data, nsteps, learning_rate, randkey)
+        unbound_loss_and_grad, uparams, data, nsteps, learning_rate, randkey,
+        thin, progress)
 
     if RANK == 0:
         final_params = invert_trans(final_uparams.T).T
