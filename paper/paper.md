@@ -127,8 +127,8 @@ model data, respectively.
 The analogous `compare_fourier_counts` method can provide additional loss 
 terms relating to differences in the empirical characteristic function (ECF; 
 @Cramer:1954). It is evaluated at a random sample of (20 by default) 
-fourier-space positions, $\vec{\tilde{x}}_k$, for both the "true" and "model" 
-fourier counts:
+Fourier-space positions, $\vec{\tilde{x}}_k$, for both the "true" and "model" 
+Fourier counts:
 
 $$ \tilde{N}_k = \sum\limits_i \exp(i \vec{\tilde{x}}_k \cdot \vec{x}_i). $$
 
