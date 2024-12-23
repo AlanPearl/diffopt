@@ -1,0 +1,38 @@
+cff-version: "1.2.0"
+authors:
+- family-names: Pearl
+  given-names: Alan N.
+  orcid: "https://orcid.org/0000-0001-9820-9619"
+- family-names: Beltz-Mohrmann
+  given-names: Gillian D.
+  orcid: "https://orcid.org/0000-0002-4392-8920"
+- family-names: Hearin
+  given-names: Andrew P.
+  orcid: "https://orcid.org/0000-0003-2219-6852"
+doi: 10.5281/zenodo.14291795
+message: If you use this software, please cite our article in the
+  Journal of Open Source Software.
+preferred-citation:
+  authors:
+  - family-names: Pearl
+    given-names: Alan N.
+    orcid: "https://orcid.org/0000-0001-9820-9619"
+  - family-names: Beltz-Mohrmann
+    given-names: Gillian D.
+    orcid: "https://orcid.org/0000-0002-4392-8920"
+  - family-names: Hearin
+    given-names: Andrew P.
+    orcid: "https://orcid.org/0000-0003-2219-6852"
+  date-published: 2024-12-20
+  doi: 10.21105/joss.07522
+  issn: 2475-9066
+  issue: 104
+  journal: Journal of Open Source Software
+  publisher:
+    name: Open Journals
+  start: 7522
+  title: "DiffOpt: Parallel optimization of Jax models"
+  type: article
+  url: "https://joss.theoj.org/papers/10.21105/joss.07522"
+  volume: 9
+title: "DiffOpt: Parallel optimization of Jax models"
