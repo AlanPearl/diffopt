@@ -57,19 +57,27 @@ def _adam_optimizer(params, fn, fn_data, nsteps, learning_rate, randkey=None,
     opt_state = opt_init(params)
 
     param_steps = []
-    for step in adam_trange(nsteps, disable=not progress):
+    loss_steps = []
+    thindiv = thin if thin else nsteps
+    for step in adam_trange(nsteps + 1, disable=not progress):
         if randkey is not None:
             randkey, key_i = jax.random.split(randkey)
             kwargs["randkey"] = key_i
-        _, grad = fn(params, *fn_data, **kwargs)
-        opt_state = opt_update(step, grad, opt_state)
-        params = get_params(opt_state)
-        if step == nsteps - 1 or (thin and step % thin == thin - 1):
+        loss, grad = fn(params, *fn_data, **kwargs)
+        if (step - 1) % thindiv == 0 or not len(param_steps):
+            loss_steps.append(loss)
             param_steps.append(params)
+        else:
+            loss_steps[-1] = loss
+            param_steps[-1] = params
+        if step < nsteps:
+            opt_state = opt_update(step, grad, opt_state)
+            params = get_params(opt_state)
     if not thin:
         param_steps = param_steps[-1]
+        loss_steps = loss_steps[-1]
 
-    return jnp.array(param_steps)
+    return jnp.array(param_steps), jnp.array(loss_steps)
 
 
 def run_adam_unbounded(logloss_and_grad_fn, params, data, nsteps=100,
@@ -101,8 +109,10 @@ def run_adam_unbounded(logloss_and_grad_fn, params, data, nsteps=100,
 
     Returns
     -------
-    opt : array-like
-        The optimal parameters.
+    params : jnp.array
+        The trial parameters at each iteration.
+    losses : jnp.array
+        The loss values at each iteration.
     """
     kwargs = {}
     if randkey is not None:
@@ -113,7 +123,7 @@ def run_adam_unbounded(logloss_and_grad_fn, params, data, nsteps=100,
         fn = _master_wrapper
         fn_data = (logloss_and_grad_fn, data)
 
-        params = _adam_optimizer(params, fn, fn_data, nsteps, learning_rate,
+        result = _adam_optimizer(params, fn, fn_data, nsteps, learning_rate,
                                  randkey=randkey, thin=thin, progress=progress)
 
         if COMM is not None:
@@ -135,9 +145,9 @@ def run_adam_unbounded(logloss_and_grad_fn, params, data, nsteps=100,
             else:
                 raise ValueError("task %s not recognized!" % task)
 
-        params = None
+        result = None
 
-    return params
+    return result
 
 
 def run_adam(logloss_and_grad_fn, params, data, nsteps=100, param_bounds=None,
@@ -171,8 +181,10 @@ def run_adam(logloss_and_grad_fn, params, data, nsteps=100, param_bounds=None,
 
     Returns
     -------
-    opt : array-like
-        The optimal parameters.
+    params : jnp.array
+        The trial parameters at each iteration.
+    losses : jnp.array
+        The loss values at each iteration.
     """
     if param_bounds is None:
         return run_adam_unbounded(
@@ -196,14 +208,14 @@ def run_adam(logloss_and_grad_fn, params, data, nsteps=100, param_bounds=None,
         dloss_duparams = dloss_dparams @ dparams_duparams
         return loss, dloss_duparams
 
-    uparams = apply_trans(params)
-    final_uparams = run_adam_unbounded(
-        unbound_loss_and_grad, uparams, data, nsteps, learning_rate, randkey,
+    uparams0 = apply_trans(params)
+    uparams, loss = run_adam_unbounded(
+        unbound_loss_and_grad, uparams0, data, nsteps, learning_rate, randkey,
         thin, progress)
 
     if RANK == 0:
-        final_params = invert_trans(final_uparams.T).T
-        return final_params
+        params = invert_trans(uparams.T).T
+        return params, loss
 
 
 def apply_transforms(params, bounds):

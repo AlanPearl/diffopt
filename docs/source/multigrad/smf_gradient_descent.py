@@ -129,7 +129,7 @@ if __name__ == "__main__":
     init_params = true_params + jnp.array([-1.5, 0.7])
 
     # Run gradient descent using the BFGS method powered by scipy
-    results = model.run_bfgs(init_params)
+    _, _, results = model.run_bfgs(init_params)
 
     init_smf = model.calc_sumstats_from_params(init_params)
     final_smf = model.calc_sumstats_from_params(results.x)

@@ -296,8 +296,10 @@ class OnePointModel:
 
         Returns
         -------
-        array-like
-            The optimal parameters.
+        params : jnp.array
+            The trial parameters at each iteration.
+        losses : jnp.array
+            The loss values at each iteration.
         """
         comm = self.comm if comm is None else comm
         guess = jnp.asarray(guess)
@@ -311,17 +313,19 @@ class OnePointModel:
         else:
             def loss_and_grad_fn(x, _, **kw):
                 return self.calc_loss_and_grad_from_params(x, **kw)
-        params_steps = run_adam(
+        params, losses = run_adam(
             loss_and_grad_fn, params=guess, data=None, nsteps=nsteps,
             param_bounds=param_bounds, learning_rate=learning_rate,
             randkey=randkey, thin=thin, progress=progress
         )
 
-        return jnp.asarray(comm.bcast(params_steps, root=0))
+        params = jnp.asarray(comm.bcast(params, root=0))
+        losses = jnp.asarray(comm.bcast(losses, root=0))
+        return params, losses
 
     # NOTE: Never jit this method because it uses mpi4py
     def run_bfgs(self: Any, guess, maxsteps=100, param_bounds=None,
-                 randkey=None, progress=True, comm=None):
+                 randkey=None, thin=1, progress=True, comm=None):
         """
         Run BFGS to descend the gradient and optimize the model parameters,
         given an initial guess. Stochasticity must be held fixed via a random
@@ -340,31 +344,31 @@ class OnePointModel:
             Since BFGS requires a deterministic function, this key will be
             passed to `calc_loss_and_grad_from_params()` as the "randkey" kwarg
             as a constant at every iteration
+        thin : int, optional
+            Return parameters for every `thin` iterations, by default 1. Set
+            `thin=0` to only return final parameters
         progress : bool, optional
             Display tqdm progress bar, by default True
 
         Returns
         -------
-        OptimizeResult (contains the following attributes):
-            message : str
-                describes reason of termination
-            success : boolean
-                True if converged
-            fun : float
-                minimum loss found
-            x : array
-                parameters at minimum loss found
-            jac : array
-                gradient of loss at minimum loss found
-            nfev : int
-                number of function evaluations
-            nit : int
-                number of gradient descent iterations
+        params : jnp.array
+            The trial parameters at each iteration.
+        losses : jnp.array
+            The loss values at each iteration.
+        result : OptimizeResult (contains the following attributes):
+            message : str, describes reason of termination
+            success : boolean, True if converged
+            fun : float, minimum loss found
+            x : array of parameters at minimum loss found
+            jac : array of gradient of loss at minimum loss found
+            nfev : int, number of function evaluations
+            nit : int, number of gradient descent iterations
         """
         comm = self.comm if comm is None else comm
         return run_bfgs(
             self.calc_loss_and_grad_from_params, guess, maxsteps=maxsteps,
-            param_bounds=param_bounds, randkey=randkey,
+            param_bounds=param_bounds, randkey=randkey, thin=thin,
             progress=progress, comm=comm)
 
     def run_lhs_param_scan(self, xmins, xmaxs, n_dim,
@@ -560,7 +564,7 @@ class OnePointModel:
         return isinstance(other, OnePointGroup) and self is other
 
 
-@ dataclass
+@dataclass
 class OnePointGroup:
     """
     Allows different OnePointModels to simultaneously perform their
@@ -604,10 +608,10 @@ class OnePointGroup:
 
     # NOTE: Never jit this method because it uses mpi4py
     def run_bfgs(self, guess, maxsteps=100, param_bounds=None, randkey=None,
-                 progress=True):
+                 thin=1, progress=True):
         return OnePointModel.run_bfgs(
             self, guess, maxsteps, param_bounds=param_bounds,
-            randkey=randkey, progress=progress,
+            randkey=randkey, thin=thin, progress=progress,
             comm=self.main_comm)
 
     # NOTE: Never jit this method because it uses mpi4py

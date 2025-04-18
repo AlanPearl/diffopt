@@ -64,12 +64,12 @@ def adam(lossfunc, guess, nsteps=100, param_bounds=None,
         return lossfunc(params, *args, **kwargs)
 
     init_uparams = apply_transforms(guess, param_bounds)
-    uparams = adam_unbounded(
+    uparams, loss = adam_unbounded(
         ulossfunc, init_uparams, nsteps, learning_rate, randkey,
         const_randkey, thin, progress, **other_kwargs)
     params = apply_inverse_transforms(uparams.T, param_bounds).T
 
-    return params
+    return params, loss
 
 
 def adam_unbounded(lossfunc, guess, nsteps=100, learning_rate=0.01,
@@ -85,23 +85,34 @@ def adam_unbounded(lossfunc, guess, nsteps=100, learning_rate=0.01,
     opt = optax.adam(learning_rate)
     solver = jaxopt.OptaxSolver(opt=opt, fun=lossfunc, maxiter=nsteps)
     state = solver.init_state(guess, **kwargs)
+
+    loss = []
     params = []
     params_i = guess
-    for i in tqdm.trange(nsteps, disable=not progress,
+    thindiv = thin if thin else nsteps
+    for i in tqdm.trange(nsteps + 1, disable=not progress,
                          desc="Adam Gradient Descent Progress"):
         if randkey is not None:
             randkey, key_i = jax.random.split(randkey)
             kwargs["randkey"] = key_i
-        params_i, state = solver.update(params_i, state, **kwargs)
-        if i == nsteps - 1 or (thin and i % thin == thin - 1):
+        params_next, state = solver.update(params_i, state, **kwargs)
+        if (i - 1) % thindiv == 0 or not len(params):
+            loss.append(state.value)
             params.append(params_i)
+        else:
+            loss[-1] = state.value
+            params[-1] = params_i
+        if i < nsteps:
+            params_i = params_next
     if not thin:
         params = params[-1]
+        loss = loss[-1]
 
-    return jnp.array(params)
+    return jnp.array(params), jnp.array(loss)
 
 
-def bfgs(lossfunc, guess, maxsteps=100, param_bounds=None, randkey=None):
+def bfgs(lossfunc, guess, maxsteps=100, param_bounds=None, randkey=None,
+         thin=1, progress=True):
     """
     Run BFGS to descend the gradient and optimize the model parameters,
     given an initial guess. Stochasticity must be held fixed via a random key
@@ -122,43 +133,60 @@ def bfgs(lossfunc, guess, maxsteps=100, param_bounds=None, randkey=None):
         Since BFGS requires a deterministic function, this key will be
         passed to `calc_loss_and_grad_from_params()` as the "randkey" kwarg
         as a constant at every iteration, by default None
+    thin : int, optional
+        Return parameters for every `thin` iterations, by default 1. Set
+        `thin=0` to only return final parameters
+    progress : bool, optional
+        Display tqdm progress bar, by default True
 
     Returns
     -------
-    OptimizeResult (contains the following attributes):
-        message : str
-            describes reason of termination
-        success : boolean
-            True if converged
-        fun : float
-            minimum loss found
-        x : array
-            parameters at minimum loss found
-        jac : array
-            gradient of loss at minimum loss found
-        nfev : int
-            number of function evaluations
-        nit : int
-            number of gradient descent iterations
+    params : jnp.array
+        The trial parameters at each iteration.
+    losses : jnp.array
+        The loss values at each iteration.
+    result : OptimizeResult (contains the following attributes):
+        message : str, describes reason of termination
+        success : boolean, True if converged
+        fun : float, minimum loss found
+        x : array of parameters at minimum loss found
+        jac : array of gradient of loss at minimum loss found
+        nfev : int, number of function evaluations
+        nit : int, number of gradient descent iterations
     """
     kwargs = {}
     if randkey is not None:
         randkey = keygen.init_randkey(randkey)
         kwargs["randkey"] = randkey
 
-    pbar = tqdm.trange(maxsteps, desc="BFGS Gradient Descent Progress")
+    pbar = tqdm.trange(maxsteps, desc="BFGS Gradient Descent Progress",
+                       disable=not progress)
+    params = []
+    loss = []
+    step = [-1]
+    thindiv = thin if thin else maxsteps * len(guess)
 
-    def callback(*_args, **_kwargs):
+    def callback(intermediate_result):
+        if step[0] % thindiv == 0 or not len(params):
+            params.append(intermediate_result.x)
+            loss.append(intermediate_result.fun)
+        else:
+            params[-1] = intermediate_result.x
+            loss[-1] = intermediate_result.fun
+        step[0] += 1
         pbar.update()
 
     loss_and_grad_fn = jax.value_and_grad(
         lambda x: lossfunc(x, **kwargs))
-    results = scipy.optimize.minimize(
+    result = scipy.optimize.minimize(
         loss_and_grad_fn, x0=guess, method="L-BFGS-B", jac=True,
         options=dict(maxiter=maxsteps), callback=callback, bounds=param_bounds)
+    if not thin:
+        params = params[-1]
+        loss = loss[-1]
 
     pbar.close()
-    return results
+    return jnp.array(params), jnp.array(loss), result
 
 
 def apply_transforms(params, bounds):

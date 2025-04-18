@@ -429,13 +429,13 @@ if __name__ == "__main__":
     # Run gradient descent (nearly identical to pure kdescent)
     model = MyModel()
     nsteps = 1000
-    adam_results = model.run_adam(
+    adam_params, _ = model.run_adam(
         guess, nsteps=nsteps, param_bounds=bounds,
         learning_rate=0.05, randkey=12345)
 
     if not comm.rank:
         # Print results and save figure on root rank only
-        print("Best fit params =", adam_results[-1])
+        print("Best fit params =", adam_params[-1])
 
         fig = plt.figure(figsize=(20, 9), layout="constrained")
         fig.set_facecolor("0.05")
@@ -445,10 +445,10 @@ if __name__ == "__main__":
         make_sumstat_plot(
             guess, txt="Initial guess", fig=figs[0])
         make_sumstat_plot(
-            adam_results[-1],
+            adam_params[-1],
             txt=f"Solution after {nsteps} evaluations", fig=figs[1])
         plt.savefig("kdescent-multigrad-results.png")
     else:
         # All other ranks need to do this for make_sumstat_plot() to work...
         generate_model_into_mass_bins(guess, jax.random.key(13))
-        generate_model_into_mass_bins(adam_results[-1], jax.random.key(13))
+        generate_model_into_mass_bins(adam_params[-1], jax.random.key(13))

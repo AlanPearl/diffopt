@@ -57,7 +57,8 @@ def latin_hypercube_sampler(xmin, xmax, n_dim, num_evaluations,
                             seed=None, optimization=None):
     xmin = np.zeros(n_dim) + xmin
     xmax = np.zeros(n_dim) + xmax
-    sampler = qmc.LatinHypercube(n_dim, seed=seed, optimization=optimization)
+    sampler = qmc.LatinHypercube(n_dim, rng=np.random.default_rng(seed=seed),
+                                 optimization=optimization)
     unit_hypercube = sampler.random(num_evaluations)
     return qmc.scale(unit_hypercube, xmin, xmax)
 

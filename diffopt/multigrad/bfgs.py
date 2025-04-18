@@ -3,6 +3,7 @@ try:
 except ImportError:
     tqdm = None
 
+import jax.numpy as jnp
 import scipy.optimize
 from .adam import init_randkey
 
@@ -30,7 +31,7 @@ bfgs_trange = trange_no_tqdm if tqdm is None else trange_with_tqdm
 
 
 def run_bfgs(loss_and_grad_fn, params, maxsteps=100, param_bounds=None,
-             randkey=None, progress=True, comm=COMM):
+             randkey=None, thin=1, progress=True, comm=COMM):
     """Run the adam optimizer on a loss function with a custom gradient.
 
     Parameters
@@ -46,6 +47,9 @@ def run_bfgs(loss_and_grad_fn, params, maxsteps=100, param_bounds=None,
         `None` as the bound for each unbounded parameter, by default None
     randkey : int | PRNG Key (default=None)
         This will be passed to `logloss_and_grad_fn` under the "randkey" kwarg
+    thin : int, optional
+        Return parameters for every `thin` iterations, by default 1. Set
+        `thin=0` to only return final parameters
     progress : bool, optional
         Display tqdm progress bar, by default True
     comm : MPI Communicator (default=COMM_WORLD)
@@ -53,7 +57,11 @@ def run_bfgs(loss_and_grad_fn, params, maxsteps=100, param_bounds=None,
 
     Returns
     -------
-    OptimizeResult (contains the following attributes):
+    params : jnp.array
+        The trial parameters at each iteration.
+    losses : jnp.array
+        The loss values at each iteration.
+    result : OptimizeResult (contains the following attributes):
         message : str, describes reason of termination
         success : boolean, True if converged
         fun : float, minimum loss found
@@ -69,6 +77,10 @@ def run_bfgs(loss_and_grad_fn, params, maxsteps=100, param_bounds=None,
 
     if comm is None or comm.rank == 0:
         pbar = bfgs_trange(maxsteps, disable=not progress)
+        params = []
+        loss = []
+        step = [-1]
+        thindiv = thin if thin else maxsteps * len(params)
 
         # Wrap loss_and_grad function with commands to the worker ranks
         def loss_and_grad_fn_root(params):
@@ -78,7 +90,14 @@ def run_bfgs(loss_and_grad_fn, params, maxsteps=100, param_bounds=None,
 
             return loss_and_grad_fn(params, **kwargs)
 
-        def callback(*_args, **_kwargs):
+        def callback(intermediate_result):
+            if step[0] % thindiv == 0 or not len(params):
+                params.append(intermediate_result.x)
+                loss.append(intermediate_result.fun)
+            else:
+                params[-1] = intermediate_result.x
+                loss[-1] = intermediate_result.fun
+            step[0] += 1
             if hasattr(pbar, "update"):
                 pbar.update()  # type: ignore
 
@@ -87,12 +106,17 @@ def run_bfgs(loss_and_grad_fn, params, maxsteps=100, param_bounds=None,
             options=dict(maxiter=maxsteps), callback=callback,
             bounds=param_bounds)
 
+        if not thin:
+            params = params[-1]
+            loss = loss[-1]
         if hasattr(pbar, "close"):
             pbar.close()  # type:ignore
         if comm is not None:
             comm.bcast("exit", root=0)
             comm.bcast([*result.keys()], root=0)
             comm.bcast([*result.values()], root=0)
+            comm.bcast(params, root=0)
+            comm.bcast(loss, root=0)
 
     else:
         while True:
@@ -111,5 +135,7 @@ def run_bfgs(loss_and_grad_fn, params, maxsteps=100, param_bounds=None,
         result_vals = comm.bcast(None, root=0)
         result = scipy.optimize.OptimizeResult(
             dict(zip(result_keys, result_vals)))
+        params = comm.bcast(None, root=0)
+        loss = comm.bcast(None, root=0)
 
-    return result
+    return jnp.array(params), jnp.array(loss), result
