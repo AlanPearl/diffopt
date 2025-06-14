@@ -213,9 +213,8 @@ def run_adam(logloss_and_grad_fn, params, data, nsteps=100, param_bounds=None,
         unbound_loss_and_grad, uparams0, data, nsteps, learning_rate, randkey,
         thin, progress)
 
-    if RANK == 0:
-        params = invert_trans(uparams.T).T
-        return params, loss
+    params = invert_trans(uparams.T).T
+    return params, loss
 
 
 def apply_transforms(params, bounds):
