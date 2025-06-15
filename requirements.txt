@@ -2,5 +2,5 @@ numpy
 jax
 jaxopt
 optax
-scipy
+scipy>=1.15
 tqdm

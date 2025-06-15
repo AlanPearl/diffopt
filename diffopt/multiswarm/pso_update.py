@@ -442,7 +442,7 @@ def get_lhs_initial_conditions(numpart, ndim, xlo=0, xhi=1, random_cd=True,
     x_init_key, v_init_key = jran.split(ran_key, 2)
     x_seed = int(jran.randint(
         x_init_key, (), 0, 1000000000, dtype=np.uint32))
-    sampler = qmc.LatinHypercube(ndim, optimization=opt, seed=x_seed)
+    sampler = qmc.LatinHypercube(ndim, optimization=opt, rng=x_seed)
     x_init = sampler.random(numpart)
     x_init = qmc.scale(x_init, xmin, xmax)
     v_init = _get_v_init(numpart, v_init_key, xmin, xmax, vmax_frac)
