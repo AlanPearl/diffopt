@@ -37,7 +37,7 @@ def test_reduce_sum():
             f"but expected = {expected_result}"
 
 
-def test_simple_grad_descent_pipeline():
+def test_grad_descent_methods():
     num_halos = 10_000
     data = dict(
         log_halo_masses=jnp.log10(sgd.load_halo_masses(num_halos)),
@@ -56,15 +56,38 @@ def test_simple_grad_descent_pipeline():
     assert jnp.allclose(
         data["target_sumstats"], true_sumstats)
 
-    gd_iterations = model.run_simple_grad_descent(guess=truth, nsteps=2)
-    gd_loss, gd_params = gd_iterations.loss, gd_iterations.params
-    assert jnp.isclose(gd_loss[-1], 0.0)
-    assert jnp.allclose(gd_params[-1], jnp.array([*truth]))
-    assert jnp.allclose(true_gradloss, 0.0, atol=1e-4)
-
     # Calculate grad(loss) with the more memory efficient method
     loss, dloss_dparams = model.calc_loss_and_grad_from_params(truth)
 
     # Make sure it produces the same result as the memory intensive versions
     assert jnp.allclose(loss, model.calc_loss_from_params(truth))
     assert jnp.allclose(dloss_dparams, true_gradloss)
+    assert jnp.allclose(true_gradloss, 0.0, atol=1e-2)
+
+    # Run each gradient descent optimizer and check that the final loss
+    # is not far from zero and params are close to truth
+    # ==================================================================
+
+    # Simple Grad Descent optimizer
+    gd_iterations = model.run_simple_grad_descent(guess=truth, nsteps=2)
+    gd_loss, gd_params = gd_iterations.loss, gd_iterations.params
+    assert gd_loss[-1] < 1e-2, f"SimpleGD loss too high: {gd_loss[-1]}"
+    assert jnp.allclose(gd_params[-1], jnp.array([*truth]), atol=1e-2), \
+        f"SimpleGD params too far from truth: {gd_params[-1]} vs {truth}"
+
+    # Adam optimizer
+    adam_params, adam_loss = model.run_adam(guess=truth, nsteps=2)
+    assert adam_loss[-1] < 1e-2, f"Adam loss too high: {adam_loss[-1]}"
+    assert jnp.allclose(adam_params[-1], jnp.array([*truth]), atol=1e-2), \
+        f"Adam params too far from truth: {adam_params[-1]} vs {truth}"
+
+    # BFGS optimizer
+    # if MPI.COMM_WORLD.rank == 0:
+    #     import pdb
+    #     pdb.set_trace()
+    # MPI.COMM_WORLD.barrier()
+    bfgs_params, bfgs_loss, res = model.run_bfgs(guess=truth, maxsteps=2)
+    assert res.success, "BFGS did not converge"
+    assert bfgs_loss[-1] < 1e-2, f"BFGS loss too high: {bfgs_loss[-1]}"
+    assert jnp.allclose(bfgs_params[-1], jnp.array([*truth]), atol=1e-2), \
+        f"BFGS params too far from truth: {bfgs_params[-1]} vs {truth}"

@@ -38,6 +38,7 @@ def load_halo_masses(num_halos=10_000, slope=-2, mmin=10.0 ** 10, qmax=0.95):
 # SMF helper functions
 @jax.jit
 def calc_smf_cdf(logsm, mean_logsm, sigma_logsm):
+    sigma_logsm = jnp.abs(sigma_logsm)
     return 0.5 * (1 + jax.scipy.special.erf(
         (logsm - mean_logsm)/(jnp.sqrt(2) * sigma_logsm)))
 
@@ -83,8 +84,9 @@ class MySMFModel(multigrad.OnePointModel):
         return jnp.array(smf)
 
     def calc_loss_from_sumstats(self, sumstats, sumstats_aux=None):
-        target_sumstats = jnp.log10(self.aux_data["target_sumstats"])
-        sumstats = jnp.log10(sumstats)
+        eps = 1e-5
+        target_sumstats = jnp.log10(self.aux_data["target_sumstats"] + eps)
+        sumstats = jnp.log10(sumstats + eps)
         # Reduced chi2 loss function assuming unit errors (mean squared error)
         return jnp.mean((sumstats - target_sumstats)**2)
 
