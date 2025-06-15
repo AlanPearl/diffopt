@@ -12,7 +12,9 @@ import matplotlib.pyplot as plt
 from diffopt import multigrad
 
 
-def load_halo_masses(num_halos=10_000, comm=COMM_WORLD):
+def load_halo_masses(num_halos=10_000, comm=None):
+    if comm is None:
+        comm = COMM_WORLD
     if comm is None:
         size = 1
         rank = 0

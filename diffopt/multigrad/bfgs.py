@@ -11,12 +11,8 @@ try:
     from mpi4py import MPI
 
     COMM = MPI.COMM_WORLD
-    RANK = COMM.Get_rank()
-    N_RANKS = COMM.Get_size()
 except ImportError:
     COMM = None
-    RANK = 0
-    N_RANKS = 1
 
 
 def trange_no_tqdm(n, desc=None, disable=False):
@@ -30,15 +26,15 @@ def trange_with_tqdm(n, desc="BFGS Gradient Descent Progress", disable=False):
 bfgs_trange = trange_no_tqdm if tqdm is None else trange_with_tqdm
 
 
-def run_bfgs(loss_and_grad_fn, params, maxsteps=100, param_bounds=None,
-             randkey=None, thin=1, progress=True, comm=COMM):
+def run_bfgs(loss_and_grad_fn, guess, maxsteps=100, param_bounds=None,
+             randkey=None, thin=1, progress=True, comm=None):
     """Run the adam optimizer on a loss function with a custom gradient.
 
     Parameters
     ----------
     loss_and_grad_fn : callable
         Function with signature `loss_and_grad_fn(params) -> (loss, gradloss)`
-    params : array-like
+    guess : array-like
         The starting parameters.
     maxsteps : int (default=100)
         The maximum number of steps to allowed.
@@ -75,6 +71,7 @@ def run_bfgs(loss_and_grad_fn, params, maxsteps=100, param_bounds=None,
         randkey = init_randkey(randkey)
         kwargs["randkey"] = randkey
 
+    comm = comm if comm is not None else COMM
     if comm is None or comm.rank == 0:
         pbar = bfgs_trange(maxsteps, disable=not progress)
         params = []
@@ -83,12 +80,12 @@ def run_bfgs(loss_and_grad_fn, params, maxsteps=100, param_bounds=None,
         thindiv = thin if thin else maxsteps * len(params)
 
         # Wrap loss_and_grad function with commands to the worker ranks
-        def loss_and_grad_fn_root(params):
+        def loss_and_grad_fn_root(p):
             if comm is not None:
                 comm.bcast("compute", root=0)
-                comm.bcast(params)
+                comm.bcast(p)
 
-            return loss_and_grad_fn(params, **kwargs)
+            return loss_and_grad_fn(p, **kwargs)
 
         def callback(intermediate_result):
             if step[0] % thindiv == 0 or not len(params):
@@ -102,7 +99,7 @@ def run_bfgs(loss_and_grad_fn, params, maxsteps=100, param_bounds=None,
                 pbar.update()  # type: ignore
 
         result = scipy.optimize.minimize(
-            loss_and_grad_fn_root, x0=params, method="L-BFGS-B", jac=True,
+            loss_and_grad_fn_root, x0=guess, method="L-BFGS-B", jac=True,
             options=dict(maxiter=maxsteps), callback=callback,
             bounds=param_bounds)
 

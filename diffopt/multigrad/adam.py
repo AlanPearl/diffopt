@@ -17,12 +17,8 @@ try:
     from mpi4py import MPI
 
     COMM = MPI.COMM_WORLD
-    RANK = COMM.Get_rank()
-    N_RANKS = COMM.Get_size()
 except ImportError:
     COMM = None
-    RANK = 0
-    N_RANKS = 1
 
 
 def trange_no_tqdm(n, desc=None, disable=False):
@@ -36,10 +32,12 @@ def trange_with_tqdm(n, desc="Adam Gradient Descent Progress", disable=False):
 adam_trange = trange_no_tqdm if tqdm is None else trange_with_tqdm
 
 
-def _master_wrapper(params, logloss_and_grad_fn, data, randkey=None):
-    if COMM is not None:
-        COMM.bcast("compute", root=0)
-        COMM.bcast(params, root=0)
+def _master_wrapper(params, logloss_and_grad_fn, data, randkey=None,
+                    comm=None):
+    _comm = comm if comm is not None else COMM
+    if _comm is not None:
+        _comm.bcast("compute", root=0)
+        _comm.bcast(params, root=0)
 
     kwargs = {}
     if randkey is not None:
@@ -52,7 +50,6 @@ def _master_wrapper(params, logloss_and_grad_fn, data, randkey=None):
 def _adam_optimizer(params, fn, fn_data, nsteps, learning_rate, randkey=None,
                     thin=1, progress=True):
     kwargs = {}
-    # Note: Might be recommended to use optax instead of jax.example_libraries
     opt_init, opt_update, get_params = jax_opt.adam(learning_rate)
     opt_state = opt_init(params)
 
@@ -82,7 +79,7 @@ def _adam_optimizer(params, fn, fn_data, nsteps, learning_rate, randkey=None,
 
 def run_adam_unbounded(logloss_and_grad_fn, params, data, nsteps=100,
                        learning_rate=0.01, randkey=None,
-                       thin=1, progress=True):
+                       thin=1, progress=True, comm=None):
     """Run the adam optimizer on a loss function with a custom gradient.
 
     Parameters
@@ -106,6 +103,8 @@ def run_adam_unbounded(logloss_and_grad_fn, params, data, nsteps=100,
         `thin=0` to only return final parameters
     progress : bool, optional
         Display tqdm progress bar, by default True
+    comm : MPI.Comm, optional
+        MPI communicator to use for parallelism
 
     Returns
     -------
@@ -119,23 +118,25 @@ def run_adam_unbounded(logloss_and_grad_fn, params, data, nsteps=100,
         randkey = init_randkey(randkey)
         kwargs["randkey"] = randkey
 
-    if RANK == 0:
-        fn = _master_wrapper
+    _comm = comm if comm is not None else COMM
+    _rank = 0 if _comm is None else _comm.rank
+
+    if _rank == 0:
+        fn = partial(_master_wrapper, comm=_comm)
         fn_data = (logloss_and_grad_fn, data)
 
-        result = _adam_optimizer(params, fn, fn_data, nsteps, learning_rate,
-                                 randkey=randkey, thin=thin, progress=progress)
+        param_steps, loss_steps = _adam_optimizer(
+            params, fn, fn_data, nsteps, learning_rate,
+            randkey=randkey, thin=thin, progress=progress)
 
-        if COMM is not None:
-            COMM.bcast("exit", root=0)
+        if _comm is not None:
+            _comm.bcast("exit", root=0)
     else:
-        # never get here if COMM is none
         while True:
-            task = COMM.bcast(None, root=0)
+            task = _comm.bcast(None, root=0)
 
             if task == "compute":
-                params = COMM.bcast(None, root=0)
-                # mpi bcast params
+                params = _comm.bcast(None, root=0)
                 if randkey is not None:
                     randkey = gen_new_key(randkey)
                     kwargs["randkey"] = randkey
@@ -145,13 +146,18 @@ def run_adam_unbounded(logloss_and_grad_fn, params, data, nsteps=100,
             else:
                 raise ValueError("task %s not recognized!" % task)
 
-        result = None
+        param_steps = None
+        loss_steps = None
 
-    return result
+    if _comm is not None:
+        param_steps = _comm.bcast(param_steps, root=0)
+        loss_steps = _comm.bcast(loss_steps, root=0)
+    return jnp.asarray(param_steps), jnp.asarray(loss_steps)
 
 
 def run_adam(logloss_and_grad_fn, params, data, nsteps=100, param_bounds=None,
-             learning_rate=0.01, randkey=None, thin=1, progress=True):
+             learning_rate=0.01, randkey=None, thin=1, progress=True,
+             comm=None):
     """Run the adam optimizer on a loss function with a custom gradient.
 
     Parameters
@@ -178,6 +184,8 @@ def run_adam(logloss_and_grad_fn, params, data, nsteps=100, param_bounds=None,
         `thin=0` to only return final parameters
     progress : bool, optional
         Display tqdm progress bar, by default True
+    comm : MPI.Comm, optional
+        MPI communicator to use for parallelism
 
     Returns
     -------
@@ -186,11 +194,12 @@ def run_adam(logloss_and_grad_fn, params, data, nsteps=100, param_bounds=None,
     losses : jnp.array
         The loss values at each iteration.
     """
+    _comm = comm if comm is not None else COMM
     if param_bounds is None:
         return run_adam_unbounded(
             logloss_and_grad_fn, params, data, nsteps=nsteps,
             learning_rate=learning_rate, randkey=randkey,
-            thin=thin, progress=progress)
+            thin=thin, progress=progress, comm=_comm)
 
     assert len(params) == len(param_bounds)
     if hasattr(param_bounds, "tolist"):
@@ -211,7 +220,7 @@ def run_adam(logloss_and_grad_fn, params, data, nsteps=100, param_bounds=None,
     uparams0 = apply_trans(params)
     uparams, loss = run_adam_unbounded(
         unbound_loss_and_grad, uparams0, data, nsteps, learning_rate, randkey,
-        thin, progress)
+        thin, progress, comm=_comm)
 
     params = invert_trans(uparams.T).T
     return params, loss

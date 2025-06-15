@@ -14,19 +14,15 @@ try:
     from mpi4py import MPI
 
     COMM = MPI.COMM_WORLD
-    RANK = COMM.Get_rank()
-    N_RANKS = COMM.Get_size()
     Comm = MPI.Comm
     Intracomm = MPI.Intracomm
 except ImportError:
     MPI = COMM = None
     Comm = Intracomm = type(None)
-    RANK = 0
-    N_RANKS = 1
 
 try:
-    if RANK:
-        raise ImportError("Only show progress bar on RANK=0 task")
+    if COMM is not None and COMM.rank:
+        raise ImportError("Only show progress bar on the RANK=0 task")
     from tqdm import auto as tqdm
 except ImportError:
     tqdm = None
@@ -63,8 +59,14 @@ def latin_hypercube_sampler(xmin, xmax, n_dim, num_evaluations,
     return qmc.scale(unit_hypercube, xmin, xmax)
 
 
-def scatter_nd(array, axis=0, comm=COMM, root=0):
+def scatter_nd(array, axis=0, comm=None, root=0):
     """Scatter n-dimensional array from root to all ranks"""
+    if comm is None:
+        comm = COMM
+        if comm is None:
+            raise ValueError("MPI communicator is not available. "
+                             "Please install mpi4py.")
+
     ans: np.ndarray = np.array([])
     if comm.rank == root:
         splits = np.array_split(array, comm.size, axis=axis)

@@ -31,7 +31,7 @@ class ParticleSwarm:
                  social_weight=SOCIAL_WEIGHT,
                  vmax_frac=VMAX_FRAC,
                  ranks_per_particle=None,
-                 comm=COMM_WORLD):
+                 comm=None):
         """
         Initialize particles and MPI communicators to be used for PSO
 
@@ -66,6 +66,8 @@ class ParticleSwarm:
         comm : MPI.Comm, optional
             MPI Communicator, by default COMM_WORLD
         """
+        if comm is None:
+            comm = COMM_WORLD
         randkey = init_randkey(seed)
         subcomm, particles_on_this_rank = get_subcomm(
             nparticles, ranks_per_particle, comm=comm,
@@ -219,7 +221,7 @@ class ParticleSwarm:
         return best_x, best_loss
 
 
-def get_subcomm(nparticles, ranks_per_particle=None, comm=COMM_WORLD,
+def get_subcomm(nparticles, ranks_per_particle=None, comm=None,
                 return_particles_on_this_rank=False):
     """
     Initialize MPI communicators to be used for PSO
@@ -246,7 +248,11 @@ def get_subcomm(nparticles, ranks_per_particle=None, comm=COMM_WORLD,
         If `return_particles_on_this_rank=True` this list will be returned,
         specifying the indices of particles this group is responsible for
     """
-    assert comm is not None, "Please install mpi4py"
+    if comm is None:
+        comm = COMM_WORLD
+        if comm is None:
+            raise ValueError("MPI communicator is not available. "
+                             "Please install mpi4py.")
     rank, nranks = comm.Get_rank(), comm.Get_size()
     if ranks_per_particle is not None:
         # Set this to manually control intra-particle parallelization vs
@@ -258,11 +264,11 @@ def get_subcomm(nparticles, ranks_per_particle=None, comm=COMM_WORLD,
         assert not num_groups % 1, msg
         num_groups = int(num_groups)
         subcomm, _, group_rank = split_subcomms(num_groups, comm=comm)
-        particles_on_this_rank = np.array_split(
-            np.arange(nparticles), num_groups)[group_rank].tolist()
+        particles_on_this_rank = [x for x in np.array_split(
+            np.arange(nparticles), num_groups)[group_rank]]
     elif nparticles > nranks:
-        particles_on_this_rank = np.array_split(
-            np.arange(nparticles), nranks)[rank].tolist()
+        particles_on_this_rank = [x for x in np.array_split(
+            np.arange(nparticles), nranks)[rank]]
         subcomm = None
     else:
         subcomm, _, particles_on_this_rank = split_subcomms(

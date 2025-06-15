@@ -9,7 +9,7 @@ except ImportError:
 
 
 def split_subcomms(num_groups=None, ranks_per_group=None,
-                   comm=COMM_WORLD):
+                   comm=None):
     """
     Split comm into sub-comms (not grouped by nodes)
 
@@ -31,7 +31,11 @@ def split_subcomms(num_groups=None, ranks_per_group=None,
     group_rank: int
         The rank of this group (0 <= subcomm_rank < num_subcomms)
     """
-    assert comm is not None, "Cannot split subcomms without mpi4py"
+    if comm is None:
+        comm = COMM_WORLD
+        if comm is None:
+            raise ValueError("MPI communicator is not available. "
+                             "Please install mpi4py.")
     main_msg = "Specify either num_subcomms OR ranks_per_subcomm"
     sumrps_msg = "The sum of ranks_per_subcomm must equal comm.size"
     nsub_msg = "Cannot create more subcomms than there are ranks"
@@ -54,7 +58,6 @@ def split_subcomms(num_groups=None, ranks_per_group=None,
     unique_nodelist = sorted(list(set(nodelist)))
     node_number = unique_nodelist.index(subname)
     intra_node_id = len([i for i in nodelist[:comm.rank] if i == subname])
-    comm.Barrier()
 
     rankinfo = (comm.rank, intra_node_id, node_number)
     infolist = comm.allgather(rankinfo)

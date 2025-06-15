@@ -16,19 +16,15 @@ try:
     from mpi4py import MPI
 
     COMM = MPI.COMM_WORLD
-    RANK = COMM.Get_rank()
-    N_RANKS = COMM.Get_size()
     Comm = MPI.Comm
     Intracomm = MPI.Intracomm
 except ImportError:
     MPI = COMM = None
     Comm = Intracomm = type(None)
-    RANK = 0
-    N_RANKS = 1
 
 try:
-    if RANK:
-        raise ImportError("Only show progress bar on RANK=0 task")
+    if COMM is not None and COMM.rank:
+        raise ImportError("Only show progress bar on the RANK=0 task")
     from tqdm import auto as tqdm
 except ImportError:
     tqdm = None
@@ -45,7 +41,7 @@ def trange_with_tqdm(n, desc=None):
 trange = trange_no_tqdm if tqdm is None else trange_with_tqdm
 
 
-def split_subcomms_by_node(comm=COMM):
+def split_subcomms_by_node(comm=None):
     """
     Split comm into sub-comms (grouped by nodes)
 
@@ -63,16 +59,20 @@ def split_subcomms_by_node(comm=COMM):
     group_rank: int
         The rank of this group (0 <= subcomm_rank < num_subcomms)
     """
-    assert MPI is not None, "Cannot split subcomms without mpi4py"
+    if MPI is None:
+        raise ImportError("MPI is not available. "
+                          "Please install mpi4py.")
+    if comm is None:
+        comm = COMM
+
     node_name = MPI.Get_processor_name()
 
     nodelist = comm.allgather(node_name)
     unique_nodelist = sorted(list(set(nodelist)))
     node_number = unique_nodelist.index(node_name)
-    intra_node_id = len([i for i in nodelist[:RANK] if i == node_name])
-    comm.Barrier()
+    intra_node_id = len([i for i in nodelist[:comm.rank] if i == node_name])
 
-    rankinfo = (RANK, intra_node_id, node_number)
+    rankinfo = (comm.rank, intra_node_id, node_number)
     infolist = comm.allgather(rankinfo)
     sorted_infolist = sorted(infolist, key=lambda x: x[1])
     sorted_infolist = sorted(sorted_infolist, key=lambda x: x[2])
@@ -86,7 +86,7 @@ def split_subcomms_by_node(comm=COMM):
 
 
 def split_subcomms(num_groups=None, ranks_per_group=None,
-                   comm=COMM):
+                   comm=None):
     """
     Split comm into sub-comms (not grouped by nodes)
 
@@ -108,7 +108,11 @@ def split_subcomms(num_groups=None, ranks_per_group=None,
     group_rank: int
         The rank of this group (0 <= subcomm_rank < num_subcomms)
     """
-    assert comm is not None, "Cannot split subcomms without mpi4py"
+    if comm is None:
+        comm = COMM
+        if comm is None:
+            raise ValueError("MPI communicator is not available. "
+                             "Please install mpi4py.")
     main_msg = "Specify either num_subcomms OR ranks_per_subcomm"
     sumrps_msg = "The sum of ranks_per_subcomm must equal comm.size"
     nsub_msg = "Cannot create more subcomms than there are ranks"
@@ -131,7 +135,6 @@ def split_subcomms(num_groups=None, ranks_per_group=None,
     unique_nodelist = sorted(list(set(nodelist)))
     node_number = unique_nodelist.index(subname)
     intra_node_id = len([i for i in nodelist[:comm.rank] if i == subname])
-    comm.Barrier()
 
     rankinfo = (comm.rank, intra_node_id, node_number)
     infolist = comm.allgather(rankinfo)
@@ -146,7 +149,7 @@ def split_subcomms(num_groups=None, ranks_per_group=None,
     return sub_comm, num_groups, int(subname)
 
 
-def reduce_sum(value, root=None, comm=COMM):
+def reduce_sum(value, root=None, comm=None):
     """Returns the sum of `value` across all MPI processes
 
     Parameters
@@ -166,7 +169,9 @@ def reduce_sum(value, root=None, comm=COMM):
         Sum of values given by each rank of the communicator
     """
     if comm is None:
-        return value
+        comm = COMM
+        if comm is None:
+            return value
     return_to_scalar = not hasattr(value, "__len__")
     value = np.asarray(value)
     if root is None:
@@ -316,11 +321,9 @@ class OnePointModel:
         params, losses = run_adam(
             loss_and_grad_fn, params=guess, data=None, nsteps=nsteps,
             param_bounds=param_bounds, learning_rate=learning_rate,
-            randkey=randkey, thin=thin, progress=progress
+            randkey=randkey, thin=thin, progress=progress, comm=comm
         )
 
-        params = jnp.asarray(comm.bcast(params, root=0))
-        losses = jnp.asarray(comm.bcast(losses, root=0))
         return params, losses
 
     # NOTE: Never jit this method because it uses mpi4py
