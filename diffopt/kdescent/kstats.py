@@ -1,4 +1,5 @@
 from functools import partial
+from typing import overload, Tuple, Any
 
 import jax.random
 import jax.numpy as jnp
@@ -6,7 +7,7 @@ import jax.numpy as jnp
 
 class KCalc:
     def __init__(self, training_x, training_weights=None, num_kernels=20,
-                 bandwidth_factor=0.4, num_fourier_kernels=20,
+                 num_fourier_positions=20, bandwidth_factor=0.4,
                  fourier_range_factor=4.0, covariant_kernels=True, comm=None):
         """
         This KDE object is the fundamental building block of kdescent. It
@@ -21,10 +22,10 @@ class KCalc:
             Training weights of shape (n_data,), by default None
         num_kernels : int, optional
             Number of KDE kernels to appriximate the PDF, by default 20
+        num_fourier_positions : int, optional
+            Number of points in k-space to evaluate the ECF, by default 20
         bandwidth_factor : float, optional
             Increase or decrease the kernel bandwidth, by default 0.4
-        num_fourier_kernels : int, optional
-            Number of points in k-space to evaluate the ECF, by default 20
         fourier_range_factor : float, optional
             Increase or decrease the Fourier search space, by default 4.0
         covariant_kernels : bool, optional
@@ -34,9 +35,9 @@ class KCalc:
         comm : MPI Communicator, optional
             For parallel computing, this guarantees consistent kernel
             placements by all MPI ranks within the comm, by default None.
-            WARNING: Do not pass in an MPI communicator if you plan on wrapping
-            kernel drawing with a JIT-compiled function. In this case, be very
-            careful to pass identical randkeys for each MPI rank
+            WARNING: Do not pass in an MPI communicator here if you plan on
+            wrapping kernel drawing with a JIT-compiled function. In this case,
+            just be very careful to pass identical randkeys for each MPI rank
         """
         self.training_x = jnp.atleast_2d(jnp.asarray(training_x).T).T
         assert self.training_x.ndim == 2, "x must have shape (ndata, ndim)"
@@ -52,11 +53,40 @@ class KCalc:
         self.bandwidth_factor = bandwidth_factor
         self.bandwidth = self._set_bandwidth(self.bandwidth_factor)
         self.kernelcov = self._bandwidth_to_kernelcov(self.bandwidth)
-        self.num_fourier_kernels = num_fourier_kernels
+        self.num_fourier_positions = num_fourier_positions
         self.k_max = (fourier_range_factor
                       / self.training_x.std(ddof=1, axis=0))
 
-    def compare_kde_counts(self, randkey, x, weights=None):
+    # Specify signatures to make linters happy
+    @overload
+    def compare_kde_counts(
+        self, randkey: Any, x: Any, weights: Any = None,
+        return_err: bool = False
+    ) -> Tuple[jnp.ndarray, jnp.ndarray]:
+        ...
+
+    @overload
+    def compare_kde_counts(
+        self, randkey: Any, x: Any, weights: Any = None,
+        return_err: bool = True
+    ) -> Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
+        ...
+
+    @overload
+    def compare_fourier_counts(
+        self, randkey: Any, x: Any, weights: Any = None,
+        return_err: bool = False
+    ) -> Tuple[jnp.ndarray, jnp.ndarray]:
+        ...
+
+    @overload
+    def compare_fourier_counts(
+        self, randkey: Any, x: Any, weights: Any = None,
+        return_err: bool = True
+    ) -> Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
+        ...
+
+    def compare_kde_counts(self, randkey, x, weights=None, return_err=False):
         """
         Realize kernel centers and return all kernel-weighted counts
 
@@ -68,6 +98,9 @@ class KCalc:
             Effective counts with shape (n_model_data,). If supplied,
             function will return sum(weights * kernel_weights) within
             each kernel instead of simply sum(kernel_weights)
+        return_err: bool
+            If true, also return the uncertainty of all training KDE counts
+            values according to the effective sample size (ESS) in each kernel
 
         Returns
         -------
@@ -76,13 +109,22 @@ class KCalc:
         truth : jnp.ndarray
             KDE counts measured on `training_x`. This is always different
             due to the random kernel placements. Has shape (num_kernels,)
+        err : jnp.ndarray
+            Returned if return_err=True, uncertainties of each KDE count
+            in `truth` equal to truth/sqrt(ESS)
         """
         kde_kernels = self.realize_kde_kernels(randkey)
         prediction = self.calc_realized_kde(kde_kernels, x, weights)
-        truth = self.calc_realized_training_kde(kde_kernels)
-        return prediction, truth
+        truth = self.calc_realized_training_kde(
+            kde_kernels, return_err=return_err)
+        if not return_err:
+            return prediction, truth
+        else:
+            truth, err = truth
+            return prediction, truth, err
 
-    def compare_fourier_counts(self, randkey, x, weights=None):
+    def compare_fourier_counts(self, randkey, x, weights=None,
+                               return_err=False):
         """
         Return randomly-placed evaluations of the ECF
         (Empirical Characteristic Function = Fourier-transformed PDF)
@@ -95,6 +137,9 @@ class KCalc:
             Effective counts with shape (n_model_data,). If supplied,
             the ECF will be weighted as sum(weights * exp^(...)) at each
             evaluation in k-space instead of simply sum(exp^(...))
+        return_err: bool
+            If true, also return the uncertainty of all training Fourier counts
+            values according to the effective sample size (ESS) in each kernel
 
         Returns
         -------
@@ -103,11 +148,18 @@ class KCalc:
         truth : jnp.ndarray (complex-valued)
             CF evaluations measured on `training_x`. This is always different
             due to the random evaluation kernels. Has shape (num_kernels,)
+        err : jnp.ndarray
+            Returned if return_err=True, uncertainties of each Fourier count
+            in `truth` equal to truth/sqrt(ESS)
         """
-        fourier_kernels = self.realize_fourier_kernels(randkey)
-        prediction = self.calc_realized_fourier(fourier_kernels, x, weights)
-        truth = self.calc_realized_training_fourier(fourier_kernels)
-        return prediction, truth
+        fourier_positions = self.realize_fourier_positions(randkey)
+        prediction = self.calc_realized_fourier(fourier_positions, x, weights)
+        truth = self.calc_realized_training_fourier(fourier_positions)
+        if not return_err:
+            return prediction, truth
+        else:
+            truth, err = truth
+            return prediction, truth, err
 
     def realize_kde_kernels(self, randkey):
         if self.comm is None:
@@ -122,35 +174,38 @@ class KCalc:
                     self.training_weights, randkey)
             return self.comm.bcast(kernel_inds, root=0)
 
-    def realize_fourier_kernels(self, randkey):
+    def realize_fourier_positions(self, randkey):
         if self.comm is None:
             return _sample_fourier(
-                self.num_fourier_kernels, self.k_max, randkey)
+                self.num_fourier_positions, self.k_max, randkey)
         else:
             k_kernels = []
             if not self.comm.rank:
                 k_kernels = _sample_fourier(
-                    self.num_fourier_kernels, self.k_max, randkey)
+                    self.num_fourier_positions, self.k_max, randkey)
             return self.comm.bcast(k_kernels, root=0)
 
-    def get_realized_weights(self, kernel_inds, x):
-        return _get_weights(
+    def get_realized_kernel_probs(self, kernel_inds, x):
+        return _get_kernel_probs(
             x, self.training_x, self.kernelcov, kernel_inds)
 
-    def calc_realized_kde(self, kernel_inds, x, weights=None):
-        return _predict_kdestat(
-            x, weights, self.training_x, self.kernelcov, kernel_inds)
+    def calc_realized_kde(self, kernel_inds, x, weights=None,
+                          return_err=False):
+        return _predict_kde_counts(
+            x, weights, self.training_x, self.kernelcov, kernel_inds,
+            return_err=return_err)
 
-    def calc_realized_training_kde(self, kernel_inds):
+    def calc_realized_training_kde(self, kernel_inds, return_err=False):
         return self.calc_realized_kde(
-            kernel_inds, self.training_x, self.training_weights)
+            kernel_inds, self.training_x, self.training_weights,
+            return_err=return_err)
 
-    def calc_realized_fourier(self, fourier_kernels, x, weights=None):
-        return _predict_fourier(x, weights, fourier_kernels)
+    def calc_realized_fourier(self, fourier_positions, x, weights=None):
+        return _predict_fourier(x, weights, fourier_positions)
 
-    def calc_realized_training_fourier(self, fourier_kernels):
+    def calc_realized_training_fourier(self, fourier_positions):
         return self.calc_realized_fourier(
-            fourier_kernels, self.training_x, self.training_weights)
+            fourier_positions, self.training_x, self.training_weights)
 
     def _set_bandwidth(self, bandwidth_factor):
         """Scott's rule bandwidth... multiplied by any factor you want!"""
@@ -188,9 +243,9 @@ def _sample_kernel_inds(num_kernels, training_x, training_weights, randkey):
 
 
 @partial(jax.jit, static_argnums=[0])
-def _sample_fourier(num_fourier_kernels, k_max, randkey):
+def _sample_fourier(num_fourier_positions, k_max, randkey):
     return jax.random.uniform(
-        randkey, (num_fourier_kernels, len(k_max))
+        randkey, (num_fourier_positions, len(k_max))
     ) * k_max[None, :]
 
 
@@ -206,7 +261,7 @@ _vmap_weights_in_kernel = jax.jit(jax.vmap(
 
 
 @jax.jit
-def _get_weights(x, training_x, cov, kernel_inds):
+def _get_kernel_probs(x, training_x, cov, kernel_inds):
     # ind_weights = [_weights_in_kernel(x, training_x, cov, ind)
     #                for ind in kernel_inds]
     ind_weights = _vmap_weights_in_kernel(x, training_x, cov, kernel_inds)
@@ -214,26 +269,49 @@ def _get_weights(x, training_x, cov, kernel_inds):
 
 
 @jax.jit
-def _predict_kdestat_from_weights(x_weights, kernel_weights):
+def _predict_kde_counts_from_kernel_probs(kernel_probs, x_weights):
     if x_weights is None:
-        return jnp.sum(kernel_weights, axis=1)
+        return jnp.sum(kernel_probs, axis=1)
     else:
-        return jnp.sum(x_weights[None, :] * kernel_weights, axis=1)
+        return jnp.sum(x_weights[None, :] * kernel_probs, axis=1)
+
+
+@partial(jax.jit, static_argnames=["return_err"])
+def _predict_kde_counts(x, x_weights, training_x, cov, kernel_inds,
+                        return_err=False):
+    kernel_probs = _get_kernel_probs(x, training_x, cov, kernel_inds)
+    kde_counts = _predict_kde_counts_from_kernel_probs(kernel_probs, x_weights)
+    if return_err:
+        x_weights_squared = None
+        if x_weights is not None:
+            x_weights_squared = x_weights ** 2
+        ess = kde_counts ** 2 / _predict_kde_counts_from_kernel_probs(
+            kernel_probs ** 2, x_weights_squared)
+        err = kde_counts / jnp.sqrt(ess)
+        return kde_counts, err
+    else:
+        return kde_counts
 
 
 @jax.jit
-def _predict_kdestat(x, x_weights, training_x, cov, kernel_inds):
-    kernel_weights = _get_weights(x, training_x, cov, kernel_inds)
-    return _predict_kdestat_from_weights(x_weights, kernel_weights)
-
-
-@jax.jit
-def _predict_fourier(x, x_weights, k_kernels):
+def _predict_fourier_from_cross_prods(cross_prods, x_weights):
     if x_weights is None:
-        return jnp.sum(jnp.exp(
-            1j * jnp.sum(k_kernels[:, None, :] * x[None, :, :], axis=-1)
-        ), axis=-1)
+        return jnp.sum(jnp.exp(1j * cross_prods), axis=-1)
     else:
-        return jnp.sum(x_weights[None, :] * jnp.exp(
-            1j * jnp.sum(k_kernels[:, None, :] * x[None, :, :], axis=-1)
-        ), axis=-1)
+        return jnp.sum(x_weights[None, :] * jnp.exp(1j * cross_prods), axis=-1)
+
+
+@partial(jax.jit, static_argnames=["return_err"])
+def _predict_fourier(x, x_weights, k_kernels, return_err=False):
+    cross_prods = jnp.sum(k_kernels[:, None, :] * x[None, :, :], axis=-1)
+    fourier_counts = _predict_fourier_from_cross_prods(cross_prods, x_weights)
+    if return_err:
+        x_weights_squared = None
+        if x_weights is not None:
+            x_weights_squared = x_weights ** 2
+        ess = fourier_counts ** 2 / _predict_fourier_from_cross_prods(
+            cross_prods ** 2, x_weights_squared)
+        err = fourier_counts / jnp.sqrt(ess)
+        return fourier_counts, err
+    else:
+        return fourier_counts
