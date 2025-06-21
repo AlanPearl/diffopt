@@ -334,19 +334,19 @@ def loss_from_sumstats(sumstats, sumstats_aux):
     model_low_counts = sumstats[  # slice [0:20]
         i:(i := i + kcalc_lowmass.num_kernels)]
     model_low_fcounts = sumstats[  # slice [20:40]
-        i:(i := i + kcalc_lowmass.num_fourier_kernels)]
+        i:(i := i + kcalc_lowmass.num_fourier_positions)]
     weight_low_sum = sumstats[i:(i := i + 1)][0]  # slice [40:41][0]
 
     model_mid_counts = sumstats[  # slice [41:61]
         i:(i := i + kcalc_midmass.num_kernels)]
     model_mid_fcounts = sumstats[  # slice [61:81]
-        i:(i := i + kcalc_midmass.num_fourier_kernels)]
+        i:(i := i + kcalc_midmass.num_fourier_positions)]
     weight_mid_sum = sumstats[i:(i := i + 1)][0]  # slice [81:82][0]
 
     model_high_counts = sumstats[  # slice [82:102]
         i:(i := i + kcalc_highmass.num_kernels)]
     model_high_fcounts = sumstats[  # slice [102:122]
-        i:(i := i + kcalc_highmass.num_fourier_kernels)]
+        i:(i := i + kcalc_highmass.num_fourier_positions)]
     weight_high_sum = sumstats[i:(i := i + 1)][0]  # slice [122:123][0]
 
     # NOTE: Unpack sumstats_aux (raw truth counts per kernel)
@@ -354,17 +354,17 @@ def loss_from_sumstats(sumstats, sumstats_aux):
     truth_low_counts = sumstats_aux[  # slice [0:20]
         i:(i := i + kcalc_lowmass.num_kernels)]
     truth_low_fcounts = sumstats_aux[  # slice [20:40]
-        i:(i := i + kcalc_lowmass.num_fourier_kernels)]
+        i:(i := i + kcalc_lowmass.num_fourier_positions)]
 
     truth_mid_counts = sumstats_aux[  # slice [40:60]
         i:(i := i + kcalc_midmass.num_kernels)]
     truth_mid_fcounts = sumstats_aux[  # slice [60:80]
-        i:(i := i + kcalc_midmass.num_fourier_kernels)]
+        i:(i := i + kcalc_midmass.num_fourier_positions)]
 
     truth_high_counts = sumstats_aux[  # slice [80:100]
         i:(i := i + kcalc_highmass.num_kernels)]
     truth_high_fcounts = sumstats_aux[  # slice [100:120]
-        i:(i := i + kcalc_highmass.num_fourier_kernels)]
+        i:(i := i + kcalc_highmass.num_fourier_positions)]
 
     # Convert counts to conditional prob: P(krnl | M*) = N(krnl & M*) / N(M*)
     model_low_condprob = model_low_counts / (weight_low_sum + 1e-10)
