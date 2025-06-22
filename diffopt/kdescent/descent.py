@@ -5,8 +5,7 @@ import tqdm.auto as tqdm
 import numpy as np
 import jax.random
 import jax.numpy as jnp
-import jaxopt
-import optax
+from jax.example_libraries import optimizers as jax_opt
 
 from . import keygen
 
@@ -46,8 +45,9 @@ def adam(lossfunc, guess, nsteps=100, param_bounds=None,
     Returns
     -------
     params : jnp.array
-        List of params throughout the entire gradient descent, of shape
-        (nsteps, n_param)
+        The trial parameters at each iteration.
+    losses : jnp.array
+        The loss values at each iteration.
     """
     if param_bounds is None:
         return adam_unbounded(
@@ -82,28 +82,31 @@ def adam_unbounded(lossfunc, guess, nsteps=100, learning_rate=0.01,
         kwargs["randkey"] = key_i
         if const_randkey:
             randkey = None
-    opt = optax.adam(learning_rate)
-    solver = jaxopt.OptaxSolver(opt=opt, fun=lossfunc, maxiter=nsteps)
-    state = solver.init_state(guess, **kwargs)
+
+    loss_and_grad = jax.jit(jax.value_and_grad(lossfunc))
+    opt_init, opt_update, get_params = jax_opt.adam(learning_rate)
+    opt_state = opt_init(guess)
+    params_i = guess
 
     loss = []
     params = []
-    params_i = guess
     thindiv = thin if thin else nsteps
+
     for i in tqdm.trange(nsteps + 1, disable=not progress,
                          desc="Adam Gradient Descent Progress"):
         if randkey is not None:
             randkey, key_i = jax.random.split(randkey)
             kwargs["randkey"] = key_i
-        params_next, state = solver.update(params_i, state, **kwargs)
+        loss_i, grad = loss_and_grad(params_i, **kwargs)
         if (i - 1) % thindiv == 0 or not len(params):
-            loss.append(state.value)
+            loss.append(loss_i)
             params.append(params_i)
         else:
-            loss[-1] = state.value
+            loss[-1] = loss_i
             params[-1] = params_i
         if i < nsteps:
-            params_i = params_next
+            opt_state = opt_update(i, grad, opt_state)
+            params_i = get_params(opt_state)
     if not thin:
         params = params[-1]
         loss = loss[-1]
