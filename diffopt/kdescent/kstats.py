@@ -1,5 +1,5 @@
 from functools import partial
-from typing import overload, Tuple, Any
+from typing import overload, Tuple, Any, Literal
 
 import jax.random
 import jax.numpy as jnp
@@ -57,32 +57,61 @@ class KCalc:
         self.k_max = (fourier_range_factor
                       / self.training_x.std(ddof=1, axis=0))
 
+    def reduced_chisq_loss(self, randkey, x, weights=None, density=False):
+        key1, key2 = jax.random.split(randkey, 2)
+        model_k, truth_k, err_k = self.compare_kde_counts(
+            key1, x, weights=weights, return_err=True)
+
+        model_f, truth_f, err_f = self.compare_fourier_counts(
+            key2, x, weights=weights, return_err=True)
+
+        if density:
+            # Remove dependence of overall normalization
+            if weights is None:
+                model_n = len(x)
+            else:
+                model_n = weights.sum()
+            if self.training_weights is None:
+                truth_n = len(self.training_x)
+            else:
+                truth_n = self.training_weights.sum()
+            model_k *= truth_n / model_n
+            model_f *= truth_n / model_n
+
+        normalized_residuals = jnp.concatenate([
+            (model_k - truth_k) / err_k,
+            (model_f.real - truth_f.real) / err_f.real,
+            (model_f.imag - truth_f.imag) / err_f.imag
+        ])
+
+        return jnp.mean(normalized_residuals**2)
+
     # Specify signatures to make linters happy
     @overload
     def compare_kde_counts(
         self, randkey: Any, x: Any, weights: Any = None,
-        return_err: bool = False
+        return_err: Literal[False] = False
     ) -> Tuple[jnp.ndarray, jnp.ndarray]:
         ...
 
     @overload
     def compare_kde_counts(
         self, randkey: Any, x: Any, weights: Any = None,
-        return_err: bool = True
+        return_err: Literal[True] = True
     ) -> Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
         ...
 
     @overload
     def compare_fourier_counts(
         self, randkey: Any, x: Any, weights: Any = None,
-        return_err: bool = False
+        return_err: Literal[False] = False
     ) -> Tuple[jnp.ndarray, jnp.ndarray]:
         ...
 
     @overload
     def compare_fourier_counts(
         self, randkey: Any, x: Any, weights: Any = None,
-        return_err: bool = True
+        return_err: Literal[True] = True
     ) -> Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
         ...
 
@@ -154,7 +183,8 @@ class KCalc:
         """
         fourier_positions = self.realize_fourier_positions(randkey)
         prediction = self.calc_realized_fourier(fourier_positions, x, weights)
-        truth = self.calc_realized_training_fourier(fourier_positions)
+        truth = self.calc_realized_training_fourier(
+            fourier_positions, return_err=return_err)
         if not return_err:
             return prediction, truth
         else:
@@ -200,12 +230,16 @@ class KCalc:
             kernel_inds, self.training_x, self.training_weights,
             return_err=return_err)
 
-    def calc_realized_fourier(self, fourier_positions, x, weights=None):
-        return _predict_fourier(x, weights, fourier_positions)
+    def calc_realized_fourier(self, fourier_positions, x, weights=None,
+                              return_err=False):
+        return _predict_fourier(
+            x, weights, fourier_positions, return_err=return_err)
 
-    def calc_realized_training_fourier(self, fourier_positions):
+    def calc_realized_training_fourier(self, fourier_positions,
+                                       return_err=False):
         return self.calc_realized_fourier(
-            fourier_positions, self.training_x, self.training_weights)
+            fourier_positions, self.training_x, self.training_weights,
+            return_err=return_err)
 
     def _set_bandwidth(self, bandwidth_factor):
         """Scott's rule bandwidth... multiplied by any factor you want!"""
@@ -269,7 +303,13 @@ def _get_kernel_probs(x, training_x, cov, kernel_inds):
 
 
 @jax.jit
-def _predict_kde_counts_from_kernel_probs(kernel_probs, x_weights):
+def _get_fourier_exponentials(x, fourier_positions):
+    return jnp.exp(
+        1j * jnp.sum(fourier_positions[:, None, :] * x[None, :, :], axis=-1))
+
+
+@jax.jit
+def _weighted_sum_over_samples(kernel_probs, x_weights):
     if x_weights is None:
         return jnp.sum(kernel_probs, axis=1)
     else:
@@ -280,12 +320,12 @@ def _predict_kde_counts_from_kernel_probs(kernel_probs, x_weights):
 def _predict_kde_counts(x, x_weights, training_x, cov, kernel_inds,
                         return_err=False):
     kernel_probs = _get_kernel_probs(x, training_x, cov, kernel_inds)
-    kde_counts = _predict_kde_counts_from_kernel_probs(kernel_probs, x_weights)
+    kde_counts = _weighted_sum_over_samples(kernel_probs, x_weights)
     if return_err:
         x_weights_squared = None
         if x_weights is not None:
             x_weights_squared = x_weights ** 2
-        ess = kde_counts ** 2 / _predict_kde_counts_from_kernel_probs(
+        ess = kde_counts ** 2 / _weighted_sum_over_samples(
             kernel_probs ** 2, x_weights_squared)
         err = kde_counts / jnp.sqrt(ess)
         return kde_counts, err
@@ -293,25 +333,21 @@ def _predict_kde_counts(x, x_weights, training_x, cov, kernel_inds,
         return kde_counts
 
 
-@jax.jit
-def _predict_fourier_from_cross_prods(cross_prods, x_weights):
-    if x_weights is None:
-        return jnp.sum(jnp.exp(1j * cross_prods), axis=-1)
-    else:
-        return jnp.sum(x_weights[None, :] * jnp.exp(1j * cross_prods), axis=-1)
-
-
 @partial(jax.jit, static_argnames=["return_err"])
 def _predict_fourier(x, x_weights, k_kernels, return_err=False):
-    cross_prods = jnp.sum(k_kernels[:, None, :] * x[None, :, :], axis=-1)
-    fourier_counts = _predict_fourier_from_cross_prods(cross_prods, x_weights)
+    exponentials = _get_fourier_exponentials(x, k_kernels)
+    fourier_counts = _weighted_sum_over_samples(
+        exponentials, x_weights)
     if return_err:
         x_weights_squared = None
         if x_weights is not None:
             x_weights_squared = x_weights ** 2
-        ess = fourier_counts ** 2 / _predict_fourier_from_cross_prods(
-            cross_prods ** 2, x_weights_squared)
-        err = fourier_counts / jnp.sqrt(ess)
-        return fourier_counts, err
+        ess_real = fourier_counts.real**2 / _weighted_sum_over_samples(
+            exponentials.real**2, x_weights_squared)
+        ess_imag = fourier_counts.imag**2 / _weighted_sum_over_samples(
+            exponentials.imag**2, x_weights_squared)
+        err_real = jnp.abs(fourier_counts.real) / jnp.sqrt(ess_real)
+        err_imag = jnp.abs(fourier_counts.imag) / jnp.sqrt(ess_imag)
+        return fourier_counts, err_real + 1j * err_imag
     else:
         return fourier_counts
