@@ -42,5 +42,5 @@ jobs:
     - name: Run tests
       shell: bash -l {0}
       run: |
-        # export PYTHONWARNINGS=error
+        export PYTHONWARNINGS=error
         pytest -v
