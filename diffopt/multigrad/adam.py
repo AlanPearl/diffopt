@@ -58,8 +58,8 @@ def _adam_optimizer(params, fn, fn_data, nsteps, learning_rate, randkey=None,
     thindiv = thin if thin else nsteps
     for step in adam_trange(nsteps + 1, disable=not progress):
         if randkey is not None:
-            randkey, key_i = jax.random.split(randkey)
-            kwargs["randkey"] = key_i
+            randkey = gen_new_key(randkey)
+            kwargs["randkey"] = randkey
         loss, grad = fn(params, *fn_data, **kwargs)
         if (step - 1) % thindiv == 0 or not len(param_steps):
             loss_steps.append(loss)

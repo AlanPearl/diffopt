@@ -309,14 +309,14 @@ class OnePointModel:
         comm = self.comm if comm is None else comm
         guess = jnp.asarray(guess)
         if const_randkey:
-            def loss_and_grad_fn(x, _, **kw):
+            def loss_and_grad_fn(x, _vestigial_data_arg, **kw):
                 return self.calc_loss_and_grad_from_params(
                     x, randkey=init_randkey, **kw)
             assert randkey is not None, "Must pass randkey if const_randkey"
             init_randkey = randkey
             randkey = None
         else:
-            def loss_and_grad_fn(x, _, **kw):
+            def loss_and_grad_fn(x, _vestigial_data_arg, **kw):
                 return self.calc_loss_and_grad_from_params(x, **kw)
         params, losses = run_adam(
             loss_and_grad_fn, params=guess, data=None, nsteps=nsteps,
