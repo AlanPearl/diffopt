@@ -3,12 +3,17 @@ from typing import overload, Tuple, Any, Literal
 
 import jax.random
 import jax.numpy as jnp
+from scipy import stats
+
+IDW_SUBSAMPLE_SEED = 42
+IDW_SUBSAMPLE_SIZE = 1000
 
 
 class KCalc:
     def __init__(self, training_x, training_weights=None, num_kernels=20,
                  num_fourier_positions=20, bandwidth_factor=0.4,
-                 fourier_range_factor=4.0, covariant_kernels=True, comm=None):
+                 fourier_range_factor=4.0, covariant_kernels=True,
+                 inverse_density_weight_power=0.0, comm=None):
         """
         This KDE object is the fundamental building block of kdescent. It
         can be used to compare randomized evaluations of the PDF and ECF by
@@ -32,6 +37,10 @@ class KCalc:
             By default (True), kernels will align with the principle
             components of the training data, which can blow up kernel count
             values in nearly degenerate subspaces. Set False to prevent this
+        inverse_density_weight_power : float, optional
+            At 1.0, this will weight the kernel selection by the inverse
+            density of the training data. This is useful for selecting
+            kernels in low-density regions. No selection weighting by default
         comm : MPI Communicator, optional
             For parallel computing, this guarantees consistent kernel
             placements by all MPI ranks within the comm, by default None.
@@ -56,6 +65,21 @@ class KCalc:
         self.num_fourier_positions = num_fourier_positions
         self.k_max = (fourier_range_factor
                       / self.training_x.std(ddof=1, axis=0))
+
+        self.idw_weights = None
+        if inverse_density_weight_power > 0:
+            key = jax.random.key(IDW_SUBSAMPLE_SEED)
+            subsample = jax.random.randint(
+                key, (IDW_SUBSAMPLE_SIZE,), 0, self.training_x.shape[0])
+            subsample_x = self.training_x[subsample]
+            subsample_w = self.training_weights[subsample] \
+                if self.training_weights is not None else None
+            training_density = stats.gaussian_kde(
+                subsample_x.T, weights=subsample_w)(self.training_x.T)
+            inv_weight = training_density ** inverse_density_weight_power
+            if jnp.any(inv_weight == 0):
+                inv_weight = inv_weight + inv_weight[inv_weight > 0].min()
+            self.idw_weights = 1.0 / inv_weight
 
     def reduced_chisq_loss(self, randkey, x, weights=None, density=False):
         key1, key2 = jax.random.split(randkey, 2)
@@ -195,13 +219,13 @@ class KCalc:
         if self.comm is None:
             return _sample_kernel_inds(
                 self.num_kernels, self.training_x,
-                self.training_weights, randkey)
+                self.training_weights, self.idw_weights, randkey)
         else:
             kernel_inds = []
             if not self.comm.rank:
                 kernel_inds = _sample_kernel_inds(
                     self.num_kernels, self.training_x,
-                    self.training_weights, randkey)
+                    self.training_weights, self.idw_weights, randkey)
             return self.comm.bcast(kernel_inds, root=0)
 
     def realize_fourier_positions(self, randkey):
@@ -270,9 +294,16 @@ def _bandwidth_to_kernelcov(training_x, bandwidth, covariant_kernels=True):
 
 
 @partial(jax.jit, static_argnums=[0])
-def _sample_kernel_inds(num_kernels, training_x, training_weights, randkey):
+def _sample_kernel_inds(num_kernels, training_x, training_weights,
+                        idw_weights, randkey):
+    choice_weights = idw_weights
+    if idw_weights is None:
+        choice_weights = training_weights
+    elif training_weights is not None:
+        choice_weights = idw_weights * training_weights
+
     inds = jax.random.choice(
-        randkey, len(training_x), (num_kernels,), p=training_weights)
+        randkey, len(training_x), (num_kernels,), p=choice_weights)
     return inds
 
 
