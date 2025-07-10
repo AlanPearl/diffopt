@@ -277,7 +277,8 @@ class KCalc:
         don't have to perform a PC transform for every single iteration.
         """
         return _bandwidth_to_kernelcov(
-            self.training_x, bandwidth, self.covariant_kernels)
+            self.training_x, bandwidth, self.training_weights,
+            self.covariant_kernels)
 
 
 @jax.jit
@@ -285,9 +286,10 @@ def _set_bandwidth(n, d, bandwidth_factor):
     return n ** (-1.0 / (d + 4)) * bandwidth_factor
 
 
-@partial(jax.jit, static_argnums=[2])
-def _bandwidth_to_kernelcov(training_x, bandwidth, covariant_kernels=True):
-    empirical_cov = jnp.cov(training_x, rowvar=False)
+@partial(jax.jit, static_argnums=[3])
+def _bandwidth_to_kernelcov(training_x, bandwidth, weights=None,
+                            covariant_kernels=True):
+    empirical_cov = jnp.cov(training_x, rowvar=False, aweights=weights)
     if not covariant_kernels:
         empirical_cov = jnp.diag(jnp.diag(empirical_cov))
     return empirical_cov * bandwidth**2
