@@ -16,8 +16,8 @@ from diffopt import multigrad
 
 comm = MPI.COMM_WORLD
 
-model_nsample = 40_000
-data_nsample = 20_000  # same volume, but undersampled below logM* < 10.5
+model_nsample = 20_000
+data_nsample = 10_000  # same volume, but undersampled below logM* < 10.5
 
 # Generate data weighted from two mass-dependent multivariate normals
 
@@ -272,9 +272,15 @@ def make_sumstat_plot(params, txt="", fig=None, prev_layers=None):
 # NOTE: Since we plan on jitting, we can't pass comm=comm to our KCalcs.
 # Instead, we will be careful to call the compare_*_counts() methods with
 # identical randkeys on each MPI rank!
-kcalc_lowmass = kdescent.KCalc(training_x[is_noweight_lowmass, :2])
-kcalc_midmass = kdescent.KCalc(training_x[is_noweight_midmass, :2])
-kcalc_highmass = kdescent.KCalc(training_x[is_noweight_highmass, :2])
+ktrain_lowmass = kdescent.KPretrainer.from_training_data(
+    training_x[is_noweight_lowmass, :2])
+ktrain_midmass = kdescent.KPretrainer.from_training_data(
+    training_x[is_noweight_midmass, :2])
+ktrain_highmass = kdescent.KPretrainer.from_training_data(
+    training_x[is_noweight_highmass, :2])
+kcalc_lowmass = kdescent.KCalc(ktrain_lowmass)
+kcalc_midmass = kdescent.KCalc(ktrain_midmass)
+kcalc_highmass = kdescent.KCalc(ktrain_highmass)
 
 
 # Differentiable alternative hard binning in the loss function:
@@ -332,39 +338,39 @@ def loss_from_sumstats(sumstats, sumstats_aux):
     # NOTE: Unpack sumstats (raw model counts per kernel + total weight sums)
     i = 0
     model_low_counts = sumstats[  # slice [0:20]
-        i:(i := i + kcalc_lowmass.num_kernels)]
+        i:(i := i + kcalc_lowmass.num_eval_kernels)]
     model_low_fcounts = sumstats[  # slice [20:40]
-        i:(i := i + kcalc_lowmass.num_fourier_positions)]
+        i:(i := i + kcalc_lowmass.num_eval_fourier_positions)]
     weight_low_sum = sumstats[i:(i := i + 1)][0]  # slice [40:41][0]
 
     model_mid_counts = sumstats[  # slice [41:61]
-        i:(i := i + kcalc_midmass.num_kernels)]
+        i:(i := i + kcalc_midmass.num_eval_kernels)]
     model_mid_fcounts = sumstats[  # slice [61:81]
-        i:(i := i + kcalc_midmass.num_fourier_positions)]
+        i:(i := i + kcalc_midmass.num_eval_fourier_positions)]
     weight_mid_sum = sumstats[i:(i := i + 1)][0]  # slice [81:82][0]
 
     model_high_counts = sumstats[  # slice [82:102]
-        i:(i := i + kcalc_highmass.num_kernels)]
+        i:(i := i + kcalc_highmass.num_eval_kernels)]
     model_high_fcounts = sumstats[  # slice [102:122]
-        i:(i := i + kcalc_highmass.num_fourier_positions)]
+        i:(i := i + kcalc_highmass.num_eval_fourier_positions)]
     weight_high_sum = sumstats[i:(i := i + 1)][0]  # slice [122:123][0]
 
     # NOTE: Unpack sumstats_aux (raw truth counts per kernel)
     i = 0
     truth_low_counts = sumstats_aux[  # slice [0:20]
-        i:(i := i + kcalc_lowmass.num_kernels)]
+        i:(i := i + kcalc_lowmass.num_eval_kernels)]
     truth_low_fcounts = sumstats_aux[  # slice [20:40]
-        i:(i := i + kcalc_lowmass.num_fourier_positions)]
+        i:(i := i + kcalc_lowmass.num_eval_fourier_positions)]
 
     truth_mid_counts = sumstats_aux[  # slice [40:60]
-        i:(i := i + kcalc_midmass.num_kernels)]
+        i:(i := i + kcalc_midmass.num_eval_kernels)]
     truth_mid_fcounts = sumstats_aux[  # slice [60:80]
-        i:(i := i + kcalc_midmass.num_fourier_positions)]
+        i:(i := i + kcalc_midmass.num_eval_fourier_positions)]
 
     truth_high_counts = sumstats_aux[  # slice [80:100]
-        i:(i := i + kcalc_highmass.num_kernels)]
+        i:(i := i + kcalc_highmass.num_eval_kernels)]
     truth_high_fcounts = sumstats_aux[  # slice [100:120]
-        i:(i := i + kcalc_highmass.num_fourier_positions)]
+        i:(i := i + kcalc_highmass.num_eval_fourier_positions)]
 
     # Convert counts to conditional prob: P(krnl | M*) = N(krnl & M*) / N(M*)
     model_low_condprob = model_low_counts / (weight_low_sum + 1e-10)

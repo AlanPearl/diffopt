@@ -332,7 +332,6 @@ class KCalc:
         prediction = _predict_kde_counts(
             x, weights, kernel_cens, self.kernelcov, return_err=False)
         truth = self.kde_counts[kernel_inds]
-        print(prediction.shape, truth.shape)
         if return_err:
             err = self.kde_err[kernel_inds]
             return prediction, truth, err
