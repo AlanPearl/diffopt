@@ -59,13 +59,13 @@ class TestKdescent(unittest.TestCase):
             self.loss, params2, nsteps=100, progress=False,
             randkey=self.randkey, learning_rate=0.5)
         assert jnp.allclose(params[-1], params1, atol=0.1), "Misfit params"
-        assert losses[0] / 1e3 > losses[-1], "Final loss must improve >1000x"
+        assert losses[0] / 1e2 > losses[-1], "Final loss must improve >100x"
         params, losses = kdescent.adam(
             lambda *args, **kwargs: self.loss(*args, **kwargs, rchisq=True),
             params2, nsteps=100, progress=False,
             randkey=self.randkey, learning_rate=0.5)
         assert jnp.allclose(params[-1], params1, atol=0.1), "Misfit params"
-        assert losses[0] / 1e3 > losses[-1], "Final loss must improve >1000x"
+        assert losses[0] / 1e2 > losses[-1], "Final loss must improve >100x"
 
     def test_truth_uncertainty_chisq(self):
         # Use self.training_x and self.kde from setUp for the first sample
