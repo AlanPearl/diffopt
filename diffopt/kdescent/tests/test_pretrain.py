@@ -1,6 +1,11 @@
 import os
 import unittest
-from mpi4py import MPI
+try:
+    from mpi4py.MPI import COMM_WORLD
+    RANK = COMM_WORLD.RANK
+except ImportError:
+    COMM_WORLD = None
+    RANK = 0
 
 import jax.random
 import jax.numpy as jnp
@@ -8,6 +13,13 @@ import jax.numpy as jnp
 from ... import kdescent
 
 SHOW_PLOTS = False
+
+
+def barrier():
+    if COMM_WORLD is None:
+        return
+    else:
+        COMM_WORLD.COMM_WORLD.Barrier()
 
 
 class TestPretrain(unittest.TestCase):
@@ -28,17 +40,17 @@ class TestPretrain(unittest.TestCase):
             training_x, num_pretrain_kernels=10,
             num_pretrain_fourier_positions=10,
             inverse_density_weight_power=0.5,
-            seed=pretrain_seed, comm=MPI.COMM_WORLD)
+            seed=pretrain_seed, comm=COMM_WORLD)
 
         fn = "temp_kpretrain.npz"
-        if not MPI.COMM_WORLD.rank:
+        if not RANK:
             pretrain.save(fn)
         try:
-            MPI.COMM_WORLD.Barrier()
+            barrier()
             pretrain_loaded = kdescent.KPretrainer.load(fn)
         finally:
-            MPI.COMM_WORLD.Barrier()  # Ensure all ranks finish before deleting
-            if not MPI.COMM_WORLD.rank:
+            barrier()  # Ensure all ranks finish before deleting
+            if not RANK:
                 os.remove(fn)
 
         # Check that the pretraining works
