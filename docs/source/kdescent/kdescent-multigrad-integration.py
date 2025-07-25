@@ -273,11 +273,17 @@ def make_sumstat_plot(params, txt="", fig=None, prev_layers=None):
 # Instead, we will be careful to call the compare_*_counts() methods with
 # identical randkeys on each MPI rank!
 ktrain_lowmass = kdescent.KPretrainer.from_training_data(
-    training_x[is_noweight_lowmass, :2])
+    training_x[is_noweight_lowmass, :2],
+    bandwidth_factor=0.3, fourier_range_factor=3.0,
+)
 ktrain_midmass = kdescent.KPretrainer.from_training_data(
-    training_x[is_noweight_midmass, :2])
+    training_x[is_noweight_midmass, :2],
+    bandwidth_factor=0.3, fourier_range_factor=3.0,
+)
 ktrain_highmass = kdescent.KPretrainer.from_training_data(
-    training_x[is_noweight_highmass, :2])
+    training_x[is_noweight_highmass, :2],
+    bandwidth_factor=0.3, fourier_range_factor=3.0,
+)
 kcalc_lowmass = kdescent.KCalc(ktrain_lowmass)
 kcalc_midmass = kdescent.KCalc(ktrain_midmass)
 kcalc_highmass = kdescent.KCalc(ktrain_highmass)
@@ -434,7 +440,7 @@ class MyModel(multigrad.OnePointModel):
 if __name__ == "__main__":
     # Run gradient descent (nearly identical to pure kdescent)
     model = MyModel()
-    nsteps = 1000
+    nsteps = 600
     adam_params, _ = model.run_adam(
         guess, nsteps=nsteps, param_bounds=bounds,
         learning_rate=0.05, randkey=12345)
