@@ -1,4 +1,4 @@
 from .descent import adam, bfgs
-from .kstats import KCalc
+from .kstats import KCalc, KPretrainer
 
-__all__ = ["KCalc", "adam", "bfgs"]
+__all__ = ["KCalc", "KPretrainer", "adam", "bfgs"]

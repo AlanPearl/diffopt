@@ -8,10 +8,15 @@ from ... import kdescent
 
 class TestKdescent(unittest.TestCase):
     def setUp(self):
-        randkey = jax.random.key(1)
+        seed = 1
+        randkey = jax.random.key(seed - 10)
         self.ndata = 100
         self.training_x = self.generate_data(randkey=randkey, ndata=self.ndata)
-        self.kde = kdescent.KCalc(self.training_x, num_kernels=10)
+        pretrainer = kdescent.KPretrainer.from_training_data(
+            self.training_x, num_eval_kernels=10,
+            num_eval_fourier_positions=10,
+            seed=seed)
+        self.kde = kdescent.KCalc(pretrainer)
         self.randkey, = jax.random.split(randkey, 1)
 
     def generate_data(self, randkey, ndata=100):
