@@ -2,7 +2,7 @@ import os
 import unittest
 try:
     from mpi4py.MPI import COMM_WORLD
-    RANK = COMM_WORLD.RANK
+    RANK = COMM_WORLD.rank
 except ImportError:
     COMM_WORLD = None
     RANK = 0
@@ -19,7 +19,7 @@ def barrier():
     if COMM_WORLD is None:
         return
     else:
-        COMM_WORLD.COMM_WORLD.Barrier()
+        COMM_WORLD.Barrier()
 
 
 class TestPretrain(unittest.TestCase):

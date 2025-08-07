@@ -47,6 +47,7 @@ class KPretrainer:
         covariant_kernels=False,
         inverse_density_weight_power=0.0,
         num_idw_draws=None,
+        chunk_size=None,
         seed=0,
         comm=None,
     ):
@@ -85,6 +86,10 @@ class KPretrainer:
             Number of KDE draws + evaluations in total for the importance
             resampling to determine kernel selection with inverse density
             weighting. By default 100*num_pretrain_kernels
+        chunk_size : int, optional
+            Chunk size for pre-computation of training KDE counts, to prevent
+            memory overflow. If None, chunk_size will default to
+            `max(5*num_eval_kernels, 5*num_eval_fourier_positions)`
         seed : int, optional
             Random seed for reproducibility, by default 0
         comm : MPI Communicator, optional
@@ -105,6 +110,9 @@ class KPretrainer:
             num_pretrain_kernels = 300 * num_eval_kernels
         if num_pretrain_fourier_positions is None:
             num_pretrain_fourier_positions = 300 * num_eval_fourier_positions
+        if chunk_size is None:
+            chunk_size = max(
+                5 * num_eval_kernels, 5 * num_eval_fourier_positions)
 
         # Bandwidth and kernel covariance
         bandwidth = _set_bandwidth(
@@ -146,13 +154,16 @@ class KPretrainer:
                 fourier_positions, comm.size)[comm.rank]
 
         # Precompute KDE and Fourier counts for training data
-        kde_counts, kde_err = _predict_kde_counts(
-            training_x, training_weights, kernel_centers, kernelcov,
+        chunk_inds = list(range(
+            chunk_size, len(kernel_centers), chunk_size))
+        _res = np.concatenate([_predict_kde_counts(
+            training_x, training_weights, x, kernelcov,
             return_err=True
-        )
-        fourier_counts, fourier_err = _predict_fourier(
-            training_x, training_weights, fourier_positions, return_err=True
-        )
+        ) for x in jnp.array_split(kernel_centers, chunk_inds)], axis=1)
+        kde_counts, kde_err = _res
+        fourier_counts, fourier_err = np.concatenate([_predict_fourier(
+            training_x, training_weights, x, return_err=True
+        ) for x in jnp.array_split(fourier_positions, chunk_inds)], axis=1)
         kernel_centers = np.asarray(kernel_centers)
         fourier_positions = np.asarray(fourier_positions)
         kde_counts = np.asarray(kde_counts)
