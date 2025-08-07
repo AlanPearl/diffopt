@@ -156,14 +156,15 @@ class KPretrainer:
         # Precompute KDE and Fourier counts for training data
         chunk_inds = list(range(
             chunk_size, len(kernel_centers), chunk_size))
-        _res = np.concatenate([_predict_kde_counts(
+        kde_counts, kde_err = np.concatenate([_predict_kde_counts(
             training_x, training_weights, x, kernelcov,
             return_err=True
-        ) for x in jnp.array_split(kernel_centers, chunk_inds)], axis=1)
-        kde_counts, kde_err = _res
+        ) for x in np.array_split(kernel_centers, chunk_inds)], axis=1)
+        chunk_inds = list(range(
+            chunk_size, len(fourier_positions), chunk_size))
         fourier_counts, fourier_err = np.concatenate([_predict_fourier(
             training_x, training_weights, x, return_err=True
-        ) for x in jnp.array_split(fourier_positions, chunk_inds)], axis=1)
+        ) for x in np.array_split(fourier_positions, chunk_inds)], axis=1)
         kernel_centers = np.asarray(kernel_centers)
         fourier_positions = np.asarray(fourier_positions)
         kde_counts = np.asarray(kde_counts)
