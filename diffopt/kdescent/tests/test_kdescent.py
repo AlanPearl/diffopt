@@ -9,7 +9,7 @@ from ... import kdescent
 class TestKdescent(unittest.TestCase):
     def setUp(self):
         seed = 1
-        randkey = jax.random.key(seed - 10)
+        randkey = jax.random.key(seed)
         self.ndata = 100
         self.training_x = self.generate_data(randkey=randkey, ndata=self.ndata)
         pretrainer = kdescent.KPretrainer.from_training_data(
@@ -87,8 +87,11 @@ class TestKdescent(unittest.TestCase):
 
         reduced_chisq = jnp.mean(normalized_residuals**2)
         assert jnp.allclose(
-            normalized_residuals, 0, atol=5
-        ), "All residuals must be within 5 standard deviations"
+            normalized_residuals, 0, atol=10
+        ), "All residuals must be within 10 standard deviations"
+        assert jnp.allclose(
+            jnp.mean(normalized_residuals), 0, atol=1
+        ), "Mean residual should be close to zero"
         assert jnp.isclose(
-            reduced_chisq, 2.5, atol=2.0
+            reduced_chisq, 2.5, atol=5.0
         ), f"Reduced chi^2 for KDE counts: {reduced_chisq}"

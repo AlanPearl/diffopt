@@ -5,7 +5,6 @@ import dataclasses
 import numpy as np
 import jax.random
 import jax.numpy as jnp
-from scipy import stats
 
 
 @dataclasses.dataclass
@@ -96,7 +95,8 @@ class KPretrainer:
             Distribute pre-computation of training kernel counts across ranks,
             assuming full training data is loaded and identical across ranks.
         """
-        randkeys = jax.random.split(jax.random.key(seed + 1))
+        seed = int(seed)
+        randkeys = jax.random.split(jax.random.key(seed + 987), 3)
         training_x = jnp.atleast_2d(jnp.asarray(training_x).T).T
         assert training_x.ndim == 2, "x must have shape (ndata, ndim)"
         ndim = training_x.shape[1]
@@ -105,6 +105,8 @@ class KPretrainer:
             num_eval_kernels = 10 * ndim
         if num_eval_fourier_positions is None:
             num_eval_fourier_positions = 10 * ndim
+        num_eval_kernels = int(num_eval_kernels)
+        num_eval_fourier_positions = int(num_eval_fourier_positions)
         # By default, pretrain on 300 * number of evaluation kernels
         if num_pretrain_kernels is None:
             num_pretrain_kernels = 300 * num_eval_kernels
@@ -112,7 +114,10 @@ class KPretrainer:
             num_pretrain_fourier_positions = 300 * num_eval_fourier_positions
         if chunk_size is None:
             chunk_size = max(
-                5 * num_eval_kernels, 5 * num_eval_fourier_positions)
+                5 * num_eval_kernels, 5 * num_eval_fourier_positions, 1)
+        num_pretrain_kernels = int(num_pretrain_kernels)
+        num_pretrain_fourier_positions = int(num_pretrain_fourier_positions)
+        chunk_size = int(chunk_size)
 
         # Bandwidth and kernel covariance
         bandwidth = _set_bandwidth(
@@ -123,14 +128,16 @@ class KPretrainer:
         k_max = (fourier_range_factor / training_x.std(ddof=1, axis=0))
 
         # KDE for sampling kernel centers
-        kde = stats.gaussian_kde(training_x.T, weights=training_weights)
+        kde = jax.scipy.stats.gaussian_kde(
+            training_x.T, weights=training_weights)
 
         # Importance resampling for inverse density weighting
         if inverse_density_weight_power > 0:
             if num_idw_draws is None:
                 num_idw_draws = 100 * num_pretrain_kernels
-            raw_samples = kde.resample(num_idw_draws, seed=seed)
-            pdf_vals = kde.pdf(raw_samples)
+            raw_samples = jax.jit(
+                lambda x: kde.resample(x, (num_idw_draws,)))(randkeys[2])
+            pdf_vals = jax.jit(lambda x: kde.pdf(x))(raw_samples)
             idw = pdf_vals ** (-inverse_density_weight_power)
 
             # Choose kernel centers with importance weights
@@ -139,7 +146,9 @@ class KPretrainer:
                 p=idw, replace=False)
             kernel_centers = jnp.asarray(raw_samples[:, chosen_idx].T)
         else:
-            kernel_centers = kde.resample(num_pretrain_kernels, seed=seed).T
+            kernel_centers = jax.jit(
+                lambda x: kde.resample(x, (num_pretrain_kernels,)))(
+                    randkeys[2]).T
 
         # Sample fourier positions uniformly in k-space
         fourier_positions = jax.random.uniform(
@@ -241,17 +250,19 @@ class KCalc:
         self.kde_err = jnp.array(pretrainer.kde_err)
         self.fourier_counts = jnp.array(pretrainer.fourier_counts)
         self.fourier_err = jnp.array(pretrainer.fourier_err)
-        self.num_eval_kernels = pretrainer.num_eval_kernels
-        self.num_eval_fourier_positions = pretrainer.num_eval_fourier_positions
-        self.num_pretrain_kernels = pretrainer.num_pretrain_kernels
-        self.num_pretrain_fourier_positions = \
-            pretrainer.num_pretrain_fourier_positions
-        self.bandwidth_factor = pretrainer.bandwidth_factor
-        self.fourier_range_factor = pretrainer.fourier_range_factor
-        self.covariant_kernels = pretrainer.covariant_kernels
-        self.inverse_density_weight_power = \
-            pretrainer.inverse_density_weight_power
-        self.training_sum_of_weights = pretrainer.training_sum_of_weights
+        self.num_eval_kernels = int(pretrainer.num_eval_kernels)
+        self.num_eval_fourier_positions = int(
+            pretrainer.num_eval_fourier_positions)
+        self.num_pretrain_kernels = int(pretrainer.num_pretrain_kernels)
+        self.num_pretrain_fourier_positions = int(
+            pretrainer.num_pretrain_fourier_positions)
+        self.bandwidth_factor = float(pretrainer.bandwidth_factor)
+        self.fourier_range_factor = float(pretrainer.fourier_range_factor)
+        self.covariant_kernels = bool(pretrainer.covariant_kernels)
+        self.inverse_density_weight_power = float(
+            pretrainer.inverse_density_weight_power)
+        self.training_sum_of_weights = float(
+            pretrainer.training_sum_of_weights)
 
     def reduced_chisq_loss(self, randkey, x, weights=None, density=False):
         key1, key2 = jax.random.split(randkey, 2)

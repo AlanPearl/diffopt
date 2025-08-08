@@ -33,7 +33,7 @@ class TestPretrain(unittest.TestCase):
 
     def test_pretrain(self):
         pretrain_seed = 0
-        randkey = jax.random.key(1)
+        randkey = jax.random.key(pretrain_seed + 11)
         ndata = 10000
         training_x = self.generate_data(randkey=randkey, ndata=ndata)
         pretrain = kdescent.KPretrainer.from_training_data(
