@@ -139,17 +139,26 @@ class KPretrainer:
             idw_chunk_size = chunk_size * 100
             num_chunks = num_idw_draws // idw_chunk_size + (
                 num_idw_draws % idw_chunk_size > 0)
+
+            # Might as well distribute chunks across MPI ranks
+            if comm is not None:
+                chunk_inds = np.array_split(
+                    np.arange(num_chunks), comm.size)[comm.rank]
+            else:
+                chunk_inds = range(num_chunks)
             pdf_vals = []
 
             draw_keys = jax.random.split(randkeys[2], num_chunks)
             draw_raw_samples = jax.jit(
                 lambda x: kde.resample(x, (idw_chunk_size,)))
             compute_pdf_vals = jax.jit(lambda x: kde.pdf(x))
-            for i in range(num_chunks):
+            for i in chunk_inds:
                 raw_samples = draw_raw_samples(draw_keys[i])
                 pdf_vals.append(compute_pdf_vals(raw_samples))
 
             idw = jnp.concatenate(pdf_vals) ** (-inverse_density_weight_power)
+            if comm is not None:
+                idw = jnp.concatenate(comm.allgather(idw))
 
             # Choose kernel centers with importance weights
             chosen_idx = jax.random.choice(
