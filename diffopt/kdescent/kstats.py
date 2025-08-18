@@ -88,7 +88,7 @@ class KPretrainer:
         chunk_size : int, optional
             Chunk size for pre-computation of training KDE counts, to prevent
             memory overflow. If None, chunk_size will default to
-            `max(5*num_eval_kernels, 5*num_eval_fourier_positions)`
+            `max(20*num_eval_kernels, 20*num_eval_fourier_positions)`
         seed : int, optional
             Random seed for reproducibility, by default 0
         comm : MPI Communicator, optional
@@ -114,7 +114,7 @@ class KPretrainer:
             num_pretrain_fourier_positions = 300 * num_eval_fourier_positions
         if chunk_size is None:
             chunk_size = max(
-                5 * num_eval_kernels, 5 * num_eval_fourier_positions, 1)
+                20 * num_eval_kernels, 20 * num_eval_fourier_positions, 1)
         num_pretrain_kernels = int(num_pretrain_kernels)
         num_pretrain_fourier_positions = int(num_pretrain_fourier_positions)
         chunk_size = int(chunk_size)
@@ -135,15 +135,26 @@ class KPretrainer:
         if inverse_density_weight_power > 0:
             if num_idw_draws is None:
                 num_idw_draws = 100 * num_pretrain_kernels
-            raw_samples = jax.jit(
-                lambda x: kde.resample(x, (num_idw_draws,)))(randkeys[2])
-            pdf_vals = jax.jit(lambda x: kde.pdf(x))(raw_samples)
-            idw = pdf_vals ** (-inverse_density_weight_power)
+
+            idw_chunk_size = chunk_size * 100
+            num_chunks = num_idw_draws // idw_chunk_size + (
+                num_idw_draws % idw_chunk_size > 0)
+            pdf_vals = []
+
+            draw_keys = jax.random.split(randkeys[2], num_chunks)
+            draw_raw_samples = jax.jit(
+                lambda x: kde.resample(x, (idw_chunk_size,)))
+            compute_pdf_vals = jax.jit(lambda x: kde.pdf(x))
+            for i in range(num_chunks):
+                raw_samples = draw_raw_samples(draw_keys[i])
+                pdf_vals.append(compute_pdf_vals(raw_samples))
+
+            idw = jnp.concatenate(pdf_vals) ** (-inverse_density_weight_power)
 
             # Choose kernel centers with importance weights
             chosen_idx = jax.random.choice(
                 randkeys[0], num_idw_draws, (num_pretrain_kernels,),
-                p=idw, replace=False)
+                p=idw[:num_idw_draws], replace=False)
             kernel_centers = jnp.asarray(raw_samples[:, chosen_idx].T)
         else:
             kernel_centers = jax.jit(
