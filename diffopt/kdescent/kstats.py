@@ -1,10 +1,10 @@
-from functools import partial
-from typing import overload, Tuple, Any, Literal
 import dataclasses
+from functools import partial
+from typing import Any, Literal, Tuple, overload
 
-import numpy as np
-import jax.random
 import jax.numpy as jnp
+import jax.random
+import numpy as np
 
 
 @dataclasses.dataclass
@@ -88,7 +88,7 @@ class KPretrainer:
         chunk_size : int, optional
             Chunk size for pre-computation of training KDE counts, to prevent
             memory overflow. If None, chunk_size will default to
-            `max(5*num_eval_kernels, 5*num_eval_fourier_positions)`
+            `max(num_eval_kernels, num_eval_fourier_positions)`
         seed : int, optional
             Random seed for reproducibility, by default 0
         comm : MPI Communicator, optional
@@ -114,7 +114,7 @@ class KPretrainer:
             num_pretrain_fourier_positions = 300 * num_eval_fourier_positions
         if chunk_size is None:
             chunk_size = max(
-                5 * num_eval_kernels, 5 * num_eval_fourier_positions, 1)
+                num_eval_kernels, num_eval_fourier_positions, 1)
         num_pretrain_kernels = int(num_pretrain_kernels)
         num_pretrain_fourier_positions = int(num_pretrain_fourier_positions)
         chunk_size = int(chunk_size)

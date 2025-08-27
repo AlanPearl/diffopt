@@ -3,14 +3,15 @@ Modified version of Matt's code taken from:
 https://github.com/ArgonneCPAC/diff-ghmod-tools/blob/main/diff_ghmod_tools/adam.py  # noqa
 """
 from functools import partial
+
 try:
     from tqdm import auto as tqdm
 except ImportError:
     tqdm = None
 
-import numpy as np
-import jax.random
 import jax.numpy as jnp
+import jax.random
+import numpy as np
 from jax.example_libraries import optimizers as jax_opt
 
 try:

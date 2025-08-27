@@ -1,10 +1,10 @@
 from functools import partial
 
+import jax.numpy as jnp
+import jax.random
+import numpy as np
 import scipy.optimize
 import tqdm.auto as tqdm
-import numpy as np
-import jax.random
-import jax.numpy as jnp
 from jax.example_libraries import optimizers as jax_opt
 
 from . import keygen

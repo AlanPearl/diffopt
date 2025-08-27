@@ -1,5 +1,5 @@
-import jax.random
 import jax.numpy as jnp
+import jax.random
 
 
 @jax.tree_util.register_pytree_node_class

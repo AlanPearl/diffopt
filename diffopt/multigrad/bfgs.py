@@ -5,6 +5,7 @@ except ImportError:
 
 import jax.numpy as jnp
 import scipy.optimize
+
 from .adam import init_randkey
 
 try:

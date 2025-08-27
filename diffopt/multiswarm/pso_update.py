@@ -1,13 +1,12 @@
 """Implementation of PSO algorithm described in arXiv:1108.5600 & arXiv:1310.7034"""  # noqa
 from time import time
 
-import numpy as np
 import jax
+import numpy as np
+import tqdm.auto as tqdm
 from jax import numpy as jnp
 from jax import random as jran
 from scipy.stats import qmc
-
-import tqdm.auto as tqdm
 
 from .mpi_utils import split_subcomms
 

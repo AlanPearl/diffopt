@@ -5,9 +5,9 @@ descent, which is not really recommended to be used over adam.
 """
 from typing import NamedTuple, Union
 
-import numpy as np
 import jax
 import jax.numpy as jnp
+import numpy as np
 from scipy.stats import qmc
 
 try:
