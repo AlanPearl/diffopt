@@ -25,6 +25,9 @@ API Reference
 :mod:`kdescent`
 ===============
 
+.. autoclass:: diffopt.kdescent.KPretrain
+    :members:
+
 .. autoclass:: diffopt.kdescent.KCalc
     :members:
     :special-members: __init__
